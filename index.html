@@ -966,7 +966,16 @@ function dbRefreshAll() {
   }, 20000);
 
   dbCall('today_overview', function(data, today) {
-    if (data) { DB_TODAY = data; DB_DATA_DATE = today; if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} } }
+    if (data) { DB_TODAY = data; DB_DATA_DATE = today;
+      if (DB_TODAY.total_revenue) {
+        var rv = document.getElementById('pill-rev-val');
+        if (rv) rv.textContent = '₱' + Number(DB_TODAY.total_revenue).toLocaleString();
+        var tv = document.getElementById('pill-trips-val');
+        if (tv) tv.textContent = Number(DB_TODAY.total_trips || 0).toLocaleString();
+        var av = document.getElementById('pill-active-val');
+        if (av) av.textContent = Number(DB_TODAY.active_drivers || 0).toLocaleString();
+      }
+      if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} } }
     _done(!!data);
   });
 
@@ -980,7 +989,7 @@ function dbRefreshAll() {
   });
 
   dbCall('revenue_by_asset', function(data) {
-    if (data && data.length) { DB_ASSET_REV = {}; data.forEach(function(r) { DB_ASSET_REV[String(r.asset_id)] = Number(r.revenue || 0); }); if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} } }
+    if (data && data.length) { DB_ASSET_REV = {}; data.forEach(function(r) { var asset = ASSETS.find(function(a) { return String(a.vehicle_id) === String(r.asset_id); }); var key = asset ? asset.asset_id : String(r.asset_id); DB_ASSET_REV[key] = (DB_ASSET_REV[key] || 0) + Number(r.revenue || 0); }); if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} } }
     _done(!!(data && data.length));
   });
 
