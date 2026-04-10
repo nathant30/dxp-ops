@@ -1561,24 +1561,28 @@ function buildCmd() {
   }
 
   if (ACTIVE_SERVICE === 'all') {
-    const _aS = getServiceData('all');
-    const _allXpressRev = Object.keys(DB_SERVICES).reduce((s, vtid) => {
-      const d = DB_SERVICES[vtid];
-      return s + (vtid === '16' ? Number(d.xpress_revenue || 0) : Number(d.commission || 0));
-    }, 0);
-    const _allGTV = Object.keys(DB_SERVICES).reduce((s, vtid) => s + Number(DB_SERVICES[vtid].gtv || 0), 0);
-    const rev = _allXpressRev || (_aS ? _aS.rev : 0);
-    const trips = _aS ? _aS.trips : 0;
-    const avgFare = _allGTV > 0 && trips > 0 ? Math.round(_allGTV / trips) : 0;
-    const target = ASSETS.reduce((s, a) => s + getAssetTarget(a.asset_id), 0);
-    const pct = target > 0 ? Math.round(rev / target * 100) : 0;
-    const pctCol = pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--amber)' : 'var(--red)';
-    const gap = Math.max(0, target - rev);
+    var svcDefs = [
+      { id: '16', label: 'Taxi',  icon: '🚖' },
+      { id: '1',  label: 'Moto',  icon: '🛵' },
+      { id: '2',  label: 'Car',   icon: '🚗' },
+      { id: '3',  label: 'SUV',   icon: '🚙' },
+      { id: '10', label: 'Trike', icon: '🛺' },
+    ];
+    var totRev=0, totGtv=0, totTrips=0, totCancelled=0, totExpired=0, totActiveNow=0, totDemand=0;
+    svcDefs.forEach(function(s){ var d=DB_SERVICES[s.id]||{}; totRev+=(s.id==='16'?Number(d.xpress_revenue||0):Number(d.commission||0)); totGtv+=Number(d.gtv||0); totTrips+=Number(d.trips||0); totCancelled+=Number(d.cancelled||0); totExpired+=Number(d.expired||0); totActiveNow+=Number(d.active_now||0); });
+    totDemand = totTrips + totCancelled + totExpired;
+    var totCompPct = totDemand > 0 ? Math.round(totTrips/totDemand*100) : 0;
+    var compCol = totCompPct>=90?'#34D399':totCompPct>=75?'#FCD34D':'#F87171';
+
+    function svcRow(id, icon, label, val, col) {
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.06)">'
+        +'<div style="display:flex;align-items:center;gap:5px"><span style="font-size:11px">'+icon+'</span><span style="font-size:9px;color:rgba(255,255,255,.45)">'+label+'</span></div>'
+        +'<span style="font-size:10px;font-weight:700;font-family:var(--f-mono);color:'+(col||'rgba(255,255,255,.8)')+'">'+val+'</span>'
+        +'</div>';
+    }
+
+    const _allXpressRev = totRev;
     const activeShifts = ASHIFTS.filter(s => s.date === DATA_DATE && s.status === 'active');
-    const svcCompPct   = _aS ? _aS.compPct   : 0;
-    const svcCancelled = _aS ? _aS.cancelled : 0;
-    const svcRequested = _aS ? _aS.requested : 0;
-    const svcDrivers   = _aS ? _aS.drivers   : 0;
     const allAlerts  = getAlerts();
     const critAlerts = allAlerts.filter(a => a.sev === 'red');
     const warnAlerts = allAlerts.filter(a => a.sev === 'amber');
@@ -1608,49 +1612,73 @@ function buildCmd() {
       vehicleMap[s.asset_id].total += s.gross_revenue || 0;
     });
 
-    const compCol = svcCompPct >= 90 ? '#34D399' : svcCompPct >= 75 ? '#FCD34D' : '#F87171';
+    el.innerHTML = `<div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:var(--rxl);padding:20px 24px;margin-bottom:var(--s4);border:1px solid rgba(255,255,255,.08)">
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:rgba(255,255,255,.08);border-radius:12px;overflow:hidden">
 
-    el.innerHTML = `
-    <div class="rev-intel">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(255,255,255,.08);border-radius:var(--rxl);overflow:hidden">
-        <div style="background:rgba(255,255,255,.04);padding:20px 24px">
-          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Xpress Revenue</div>
-          <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:#FCD34D;letter-spacing:-1px;line-height:1">${fP(rev)}</div>
-          <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
-            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Total GTV</span><span style="color:rgba(255,255,255,.8);font-weight:600">${fP(_allGTV)}</span></div>
-            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Taxi target</span><span style="color:rgba(255,255,255,.8);font-weight:600">${fP(target)}</span></div>
-            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Gap to target</span><span style="color:${gap>0?'#F87171':'#34D399'};font-weight:600">${gap>0?'-'+fP(gap):'✓ Exceeded'}</span></div>
+        <!-- 1. XPRESS REVENUE -->
+        <div style="background:rgba(255,255,255,.04);padding:16px 18px">
+          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Xpress Revenue</div>
+          <div style="font-size:26px;font-weight:800;font-family:var(--f-mono);color:#FCD34D;letter-spacing:-1px;line-height:1">₱${totRev.toLocaleString()}</div>
+          <div style="margin-top:10px;font-size:9px;color:rgba(255,255,255,.3);margin-bottom:4px">By service</div>
+          ${svcDefs.map(function(s){ var d=DB_SERVICES[s.id]||{}; var r=s.id==='16'?Number(d.xpress_revenue||0):Number(d.commission||0); return r>0?svcRow(s.id,s.icon,s.label,'₱'+r.toLocaleString(),'#FCD34D'):''; }).join('')}
+          <div style="margin-top:8px;display:flex;justify-content:space-between;font-size:9px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08)">
+            <span style="color:rgba(255,255,255,.35)">Platform GTV</span>
+            <span style="color:rgba(255,255,255,.6);font-family:var(--f-mono)">₱${totGtv.toLocaleString()}</span>
           </div>
         </div>
-        <div style="background:rgba(255,255,255,.04);padding:20px 24px">
-          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Completed Trips</div>
-          <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:#fff;letter-spacing:-1px;line-height:1">${trips.toLocaleString()}</div>
-          <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
-            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Avg GTV / trip</span><span style="color:rgba(255,255,255,.8);font-weight:600">${fP(avgFare)}</span></div>
-            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Active drivers</span><span style="color:#34D399;font-weight:600">${svcDrivers}</span></div>
+
+        <!-- 2. COMPLETED TRIPS -->
+        <div style="background:rgba(255,255,255,.04);padding:16px 18px">
+          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Completed Trips</div>
+          <div style="font-size:26px;font-weight:800;font-family:var(--f-mono);color:#fff;letter-spacing:-1px;line-height:1">${totTrips.toLocaleString()}</div>
+          <div style="margin-top:10px;font-size:9px;color:rgba(255,255,255,.3);margin-bottom:4px">By service</div>
+          ${svcDefs.map(function(s){ var d=DB_SERVICES[s.id]||{}; var t=Number(d.trips||0); return t>0?svcRow(s.id,s.icon,s.label,t.toLocaleString(),'rgba(255,255,255,.8)'):''; }).join('')}
+          <div style="margin-top:8px;display:flex;justify-content:space-between;font-size:9px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08)">
+            <span style="color:rgba(255,255,255,.35)">Cancelled</span>
+            <span style="color:#F87171;font-family:var(--f-mono)">${totCancelled.toLocaleString()}</span>
           </div>
         </div>
-        <div style="background:rgba(255,255,255,.04);padding:20px 24px">
-          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">App Completion Rate</div>
-          <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:${compCol};letter-spacing:-1px;line-height:1">${svcCompPct}%</div>
-          <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
-            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Completed</span><span style="color:#34D399;font-weight:600">${trips.toLocaleString()}</span></div>
-            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Cancelled</span><span style="color:${svcCancelled>0?'#F87171':'rgba(255,255,255,.8)'};font-weight:600">${svcCancelled.toLocaleString()}</span></div>
-            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Total requested</span><span style="color:rgba(255,255,255,.8);font-weight:600">${svcRequested.toLocaleString()}</span></div>
+
+        <!-- 3. APP COMPLETION RATE -->
+        <div style="background:rgba(255,255,255,.04);padding:16px 18px">
+          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">App Completion Rate</div>
+          <div style="font-size:26px;font-weight:800;font-family:var(--f-mono);color:${compCol};letter-spacing:-1px;line-height:1">${totCompPct}%</div>
+          <div style="margin-top:10px;font-size:9px;color:rgba(255,255,255,.3);margin-bottom:4px">By service</div>
+          ${svcDefs.map(function(s){ var d=DB_SERVICES[s.id]||{}; var t=Number(d.trips||0),c=Number(d.cancelled||0),e=Number(d.expired||0),req=t+c+e; var pct=req>0?Math.round(t/req*100):0; var col=pct>=90?'#34D399':pct>=75?'#FCD34D':'#F87171'; return req>0?svcRow(s.id,s.icon,s.label,pct+'%',col):''; }).join('')}
+          <div style="margin-top:8px;display:flex;justify-content:space-between;font-size:9px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08)">
+            <span style="color:rgba(255,255,255,.35)">Total requested</span>
+            <span style="color:rgba(255,255,255,.6);font-family:var(--f-mono)">${totDemand.toLocaleString()}</span>
           </div>
         </div>
-        <div style="background:rgba(255,255,255,.04);padding:20px 24px">
-          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Taxi Target</div>
-          <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:${pctCol};letter-spacing:-1px;line-height:1">${pct}%</div>
-          <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
-            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Status</span><span style="color:${pct>=100?'#34D399':pct>=80?'#FCD34D':'#F87171'};font-weight:600">${pct>=100?'✓ Exceeded':pct>=80?'On track':'Behind pace'}</span></div>
-            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Revenue gap</span><span style="color:rgba(255,255,255,.8);font-weight:600">${gap>0?'-'+fP(gap):'✓ Done'}</span></div>
-            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Taxi fleet</span><span style="color:rgba(255,255,255,.8);font-weight:600">${activeShifts.length} / ${ASSETS.length} active</span></div>
+
+        <!-- 4. DEMAND -->
+        <div style="background:rgba(255,255,255,.04);padding:16px 18px">
+          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Demand</div>
+          <div style="font-size:26px;font-weight:800;font-family:var(--f-mono);color:#C4B5FD;letter-spacing:-1px;line-height:1">${totDemand.toLocaleString()}</div>
+          <div style="margin-top:10px;font-size:9px;color:rgba(255,255,255,.3);margin-bottom:4px">By service</div>
+          ${svcDefs.map(function(s){ var d=DB_SERVICES[s.id]||{}; var t=Number(d.trips||0),c=Number(d.cancelled||0),e=Number(d.expired||0),req=t+c+e; return req>0?svcRow(s.id,s.icon,s.label,req.toLocaleString(),'#C4B5FD'):''; }).join('')}
+          <div style="margin-top:8px;display:flex;justify-content:space-between;font-size:9px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08)">
+            <span style="color:rgba(255,255,255,.35)">Unfulfilled</span>
+            <span style="color:#F87171;font-family:var(--f-mono)">${(totCancelled+totExpired).toLocaleString()}</span>
           </div>
         </div>
+
+        <!-- 5. ACTIVE TRIPS -->
+        <div style="background:rgba(255,255,255,.04);padding:16px 18px">
+          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Active Trips <span style="font-size:8px;font-weight:500;background:rgba(52,211,153,.15);color:#34D399;padding:1px 5px;border-radius:6px;margin-left:3px">LIVE</span></div>
+          <div style="font-size:26px;font-weight:800;font-family:var(--f-mono);color:#34D399;letter-spacing:-1px;line-height:1">${totActiveNow.toLocaleString()}</div>
+          <div style="margin-top:10px;font-size:9px;color:rgba(255,255,255,.3);margin-bottom:4px">By service</div>
+          ${svcDefs.map(function(s){ var d=DB_SERVICES[s.id]||{}; var a=Number(d.active_now||0); return a>0?svcRow(s.id,s.icon,s.label,a.toLocaleString(),'#34D399'):''; }).join('')}
+          <div style="margin-top:8px;display:flex;justify-content:space-between;font-size:9px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08)">
+            <span style="color:rgba(255,255,255,.35)">In pickup / en route</span>
+            <span style="color:#34D399;font-family:var(--f-mono)">${totActiveNow}</span>
+          </div>
+        </div>
+
       </div>
-    </div>
-
+    </div>`
+    +
+    `
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:var(--s4);padding:var(--s4) 0">
 
       <!-- COL 1: Service Breakdown -->
