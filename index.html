@@ -886,7 +886,7 @@ function dxpSyncLoadAll() {
     _lsSet('sched_templates', templates);
   });
 
-  toast('✓ Synced from Supabase');
+  toast('✓ Settings synced from Supabase');
 }
 
 // ── Specific sync helpers for structured tables ───────────────────────────────
@@ -1215,7 +1215,7 @@ function fuelThisMonth(assetId){
 // ─── STORAGE ──────────────────────────────────────────────────────────────────
 ASSETS=(()=>{const saved=lsGet('dxp_assets2',null);if(saved&&saved.length)return saved;const a=SAMPLE_ASSETS.map(x=>({...x}));lsSet('dxp_assets2',a);return a;})();
 // Use real shift data — REAL_TODAY_SHIFTS is the authoritative source
-ASHIFTS = REAL_TODAY_SHIFTS.slice();
+ASHIFTS = []; // Live data loaded by dbRefreshAll on startup — REAL_TODAY_SHIFTS is sample only
 let AHANDOVERS=lsGet('dxp_ahandovers',[]);
 let ATARGETS=lsGet('dxp_atargets',{});
 let ASET=lsGet('dxp_aset',{alertNoTripMins:30,alertUnclosedMins:60,photoMin:2,defaultTarget:4000,cycleStart:'2026-04-01',cycleEnd:'2026-04-30'});
@@ -6142,7 +6142,7 @@ function gateCheck() {
     document.getElementById('gate').style.display = 'none';
     document.getElementById('app').style.cssText = 'display:flex;flex-direction:column;height:100vh';
     setTimeout(dxpSyncLoadAll, 800);
-    setTimeout(dbRefreshAll, 2000);
+    setTimeout(dbRefreshAll, 1000);
   } else {
     document.getElementById('gate-err').style.display = 'block';
     document.getElementById('gate-input').value = '';
@@ -6155,7 +6155,7 @@ function gateCheck() {
       document.getElementById('gate').style.display = 'none';
       document.getElementById('app').style.cssText = 'display:flex;flex-direction:column;height:100vh';
       setTimeout(dxpSyncLoadAll, 800);
-    setTimeout(dbRefreshAll, 2000);
+    setTimeout(dbRefreshAll, 1000);
     } else {
       setTimeout(function() {
         var gi = document.getElementById('gate-input');
