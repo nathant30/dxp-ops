@@ -598,7 +598,7 @@ svg{flex-shrink:0}
       </div>
     </nav>
     <main id="main">
-      <div id="alert-strip"></div>
+      <div id="service-strip" style="display:flex;align-items:center;gap:0;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;flex-shrink:0;min-height:38px"></div>
       <section class="sec on" id="sec-cmd"><div id="cmd-content" class="content"></div></section>
       <section class="sec" id="sec-fleet">
         <div class="ph"><div class="ph-left"><div class="ph-title">Fleet</div><div class="ph-sub" id="fleet-sub"></div></div><div class="ph-actions"><button class="btn btn-s" onclick="downloadFleetCSV2()">⬇ Export</button></div></div>
@@ -949,7 +949,7 @@ function dbRefreshAll() {
   DB_LOADING = true;
   updateStaleIndicator(true);
 
-  var _pending = 4;
+  var _pending = 5;
   var _anyData = false;
   function _done(gotData) {
     if (gotData) _anyData = true;
@@ -1005,12 +1005,34 @@ function dbRefreshAll() {
     }
     _done(!!(data && data.length));
   });
+
+  dbCall('services_overview', function(data) {
+    if (data && data.length) {
+      DB_SERVICES = {};
+      data.forEach(function(r) {
+        DB_SERVICES[String(r.vehicle_type_id || r.VehicleTypeId)] = {
+          trips: Number(r.trips || 0),
+          cancelled: Number(r.cancelled || 0),
+          expired: Number(r.expired || 0),
+          active_drivers: Number(r.active_drivers || 0),
+          gtv: Number(r.gtv || 0),
+          xpress_revenue: Number(r.xpress_revenue || 0),
+          commission: Number(r.commission || 0),
+          avg_fare: Number(r.avg_fare || 0),
+        };
+      });
+      renderServiceStrip();
+    }
+    _done(!!(data && data.length));
+  });
 }
 
 // Global storage for live data
 var DB_TODAY = null;
 var DB_DATA_DATE = null;
 var DB_ASSET_REV = {};
+var ACTIVE_SERVICE = 'taxi'; // default to taxi
+var DB_SERVICES = {}; // keyed by vehicleTypeId, populated by services_overview query
 
 // Override assetRevToday2 to use live DB data when available
 var _origAssetRevToday2 = typeof assetRevToday2 === 'function' ? assetRevToday2 : function() { return 0; };
@@ -3176,27 +3198,75 @@ function setDriverTier(driverId, newTier) {
 }
 
 // ─── ALERTS — CLICK TO NAVIGATE ─────────────────────────────────────────────
-function updateAlertStrip() {
-  const strip = document.getElementById('alert-strip');
-  if (!strip) return;
-  const alerts = getAlerts().filter(a => !DISMISSED_ALERTS.has(a.id || a.msg));
-  const crit = alerts.filter(a => a.sev === 'red');
-  const warn = alerts.filter(a => a.sev === 'amber');
-  if (!alerts.length) { strip.innerHTML = ''; strip.style.display = 'none'; return; }
-  strip.style.cssText = 'display:flex;align-items:center;gap:6px;padding:8px 24px;background:var(--card);border-bottom:1px solid var(--border);flex-wrap:wrap;';
-  const chips = [];
-  crit.slice(0, 3).forEach(a => {
-    const id = a.id || a.msg;
-    const nav = a.asset_id ? `openAssetDrawer('${a.asset_id}')` : a.driver_id ? `goS('fleet');openDriverDrawer('${a.driver_id}')` : `goS('assets')`;
-    chips.push(`<div class="alert-chip crit" onclick="${nav}" style="cursor:pointer">🔴 ${a.msg.slice(0,50)}<span class="dismiss" onclick="event.stopPropagation();dismissAlert('${id}')" style="margin-left:6px;opacity:.6;font-size:13px">✕</span></div>`);
-  });
-  warn.slice(0, 2).forEach(a => {
-    const id = a.id || a.msg;
-    const nav = a.asset_id ? `openAssetDrawer('${a.asset_id}')` : `goS('assets')`;
-    chips.push(`<div class="alert-chip warn" onclick="${nav}" style="cursor:pointer">🟡 ${a.msg.slice(0,50)}<span class="dismiss" onclick="event.stopPropagation();dismissAlert('${id}')" style="margin-left:6px;opacity:.6;font-size:13px">✕</span></div>`);
-  });
-  if (crit.length > 3) chips.push(`<div class="alert-chip crit" onclick="goS('assets')" style="cursor:pointer">+${crit.length-3} more</div>`);
-  strip.innerHTML = chips.join('');
+function updateAlertStrip() { renderServiceStrip(); }
+
+function renderServiceStrip() {
+  var el = document.getElementById('service-strip');
+  if (!el) return;
+
+  var tabs = [
+    { id: 'all',          label: 'All',            vtids: [16,1,2,3,10], commission: false },
+    { id: 'rideshare',    label: 'Rideshare',       vtids: [1,2,3],       commission: true  },
+    { id: 'taxi',         label: 'Taxi',            vtids: [16],          commission: false },
+    { id: 'moto-regular', label: 'Moto · Regular',  vtids: [1],           commission: true  },
+    { id: 'moto-ev',      label: 'Moto · EV',       vtids: [],            comingSoon: true  },
+    { id: 'go-car',       label: 'Go Car',           vtids: [2],           commission: true  },
+    { id: 'go-suv',       label: 'Go SUV',           vtids: [3],           commission: true  },
+  ];
+
+  function svcStats(vtids, commission) {
+    var trips = 0, cancelled = 0, expired = 0, drivers = 0, rev = 0, gtv = 0, comm = 0, fareSum = 0, fareCount = 0;
+    vtids.forEach(function(id) {
+      var s = DB_SERVICES[String(id)];
+      if (!s) return;
+      trips    += s.trips;
+      cancelled+= s.cancelled;
+      expired  += s.expired;
+      drivers  += s.active_drivers;
+      rev      += s.xpress_revenue;
+      gtv      += s.gtv;
+      comm     += s.commission;
+      if (s.avg_fare > 0) { fareSum += s.avg_fare; fareCount++; }
+    });
+    var requested = trips + cancelled + expired;
+    var compPct = requested > 0 ? Math.round(trips / requested * 100) : 0;
+    var avgFare = fareCount > 0 ? Math.round(fareSum / fareCount) : 0;
+    return { trips, cancelled, drivers, rev, gtv, comm, compPct, avgFare,
+             displayRev: commission ? comm : rev,
+             revLabel: commission ? 'Commission' : 'Xpress Rev' };
+  }
+
+  var active = ACTIVE_SERVICE;
+  var activeTab = tabs.find(function(t) { return t.id === active; }) || tabs[2];
+  var stats = activeTab.comingSoon ? null : svcStats(activeTab.vtids, activeTab.commission);
+
+  el.innerHTML = tabs.map(function(t) {
+    var isActive = t.id === active;
+    return '<button onclick="setActiveService(\'' + t.id + '\')" style="'
+      + 'padding:8px 14px;border:none;background:none;cursor:pointer;font-size:11px;font-weight:'
+      + (isActive ? '700' : '500') + ';color:'
+      + (isActive ? 'var(--accent)' : 'var(--ink3)') + ';border-bottom:2px solid '
+      + (isActive ? 'var(--accent)' : 'transparent') + ';white-space:nowrap;transition:all .15s;flex-shrink:0">'
+      + t.label + '</button>';
+  }).join('')
+  + '<div style="flex:1"></div>'
+  + (activeTab.comingSoon
+    ? '<div style="font-size:11px;color:var(--amber);padding:0 16px;font-style:italic">⏳ Coming soon — enum update pending</div>'
+    : '<div style="display:flex;align-items:center;gap:20px;padding:0 8px">'
+      + '<div style="font-size:10px;color:var(--ink3)">Trips <span style="color:var(--ink1);font-weight:700;margin-left:4px">' + stats.trips.toLocaleString() + '</span></div>'
+      + '<div style="font-size:10px;color:var(--ink3)">' + stats.revLabel + ' <span style="color:var(--green);font-weight:700;font-family:var(--f-mono);margin-left:4px">₱' + stats.displayRev.toLocaleString() + '</span></div>'
+      + (activeTab.commission ? '<div style="font-size:10px;color:var(--ink3)">GTV <span style="color:var(--ink1);font-weight:700;font-family:var(--f-mono);margin-left:4px">₱' + stats.gtv.toLocaleString() + '</span></div>' : '')
+      + '<div style="font-size:10px;color:var(--ink3)">Active <span style="color:var(--ink1);font-weight:700;margin-left:4px">' + stats.drivers + '</span></div>'
+      + '<div style="font-size:10px;color:var(--ink3)">Completion <span style="color:' + (stats.compPct>=90?'var(--green)':stats.compPct>=75?'var(--amber)':'var(--red)') + ';font-weight:700;margin-left:4px">' + stats.compPct + '%</span></div>'
+      + '<div style="font-size:10px;color:var(--ink3)">Avg fare <span style="color:var(--ink1);font-weight:700;font-family:var(--f-mono);margin-left:4px">₱' + stats.avgFare.toLocaleString() + '</span></div>'
+      + '</div>'
+  );
+}
+
+function setActiveService(id) {
+  ACTIVE_SERVICE = id;
+  renderServiceStrip();
+  if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} }
 }
 
 // ─── FULL CRASH REPORTING FORM ────────────────────────────────────────────────
