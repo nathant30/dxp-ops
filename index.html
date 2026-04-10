@@ -983,7 +983,18 @@ function dbRefreshAll() {
     if (data && data.length) {
       ASHIFTS = data.map(function(r) {
         var asset = ASSETS.find(function(a) { return String(a.vehicle_id) === String(r.vehicle_id); });
-        return { rider_id: String(r.rider_id || ''), asset_id: asset ? asset.asset_id : null, date: today, status: r.status || 'completed', trips: Number(r.trips || 0), gross_revenue: Number(r.revenue || 0), revenue: Number(r.revenue || 0), handover_out: r.status === 'completed', started_at: r.started_at || null, ended_at: r.ended_at || null };
+        return {
+          asset_id: asset ? asset.asset_id : String(r.vehicle_id || ''),
+          rider_id: String(r.rider_id || ''),
+          driver_name: String(r.driver_name || 'Driver'),
+          date: today,
+          status: r.status || 'completed',
+          trips: Number(r.trips || 0),
+          gross_revenue: Number(r.revenue || 0),
+          shift_hours: Number(r.shift_hours || 0),
+          started_at: r.started_at || null,
+          ended_at: r.ended_at || null,
+        };
       });
       DATA_DATE = today;
       if (typeof updateTopbar === 'function') updateTopbar();
@@ -1010,7 +1021,8 @@ function dbRefreshAll() {
     if (data && data.length) {
       DB_SERVICES = {};
       data.forEach(function(r) {
-        DB_SERVICES[String(r.vehicle_type_id || r.VehicleTypeId)] = {
+        var vtid = String(r.vehicle_type_id || r.VehicleTypeId || r.vehicletypeid || '');
+        DB_SERVICES[vtid] = {
           trips: Number(r.trips || 0),
           cancelled: Number(r.cancelled || 0),
           expired: Number(r.expired || 0),
@@ -1022,6 +1034,7 @@ function dbRefreshAll() {
         };
       });
       renderServiceStrip();
+      if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} }
     }
     _done(!!(data && data.length));
   });
@@ -3305,6 +3318,7 @@ function renderServiceStrip() {
 function setActiveService(id) {
   ACTIVE_SERVICE = id;
   renderServiceStrip();
+  if (typeof updateTopbar === 'function') { try { updateTopbar(); } catch(e) {} }
   if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} }
 }
 
