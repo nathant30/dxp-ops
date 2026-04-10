@@ -1566,6 +1566,7 @@ function buildCmd() {
   const svcRequested = _svc ? _svc.requested : (trips + svcCancelled + svcExpired);
   const isCommission = _svc ? _svc.isCommission : false;
   const isTaxi = ACTIVE_SERVICE === 'taxi';
+  const showVehiclePanel = (ACTIVE_SERVICE === 'taxi' || ACTIVE_SERVICE === 'all');
   const _nowUtc = new Date();
   const _phtH = (_nowUtc.getUTCHours() + 8) % 24;
   const _phtM = _nowUtc.getUTCMinutes();
@@ -1685,33 +1686,87 @@ function buildCmd() {
 
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--s4)">
 
-    <!-- COL 1: ACTIVE DRIVERS -->
+    <!-- COL 1: VEHICLES or TRIPS depending on service -->
     <div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:14px;font-weight:700">${isTaxi ? 'Active Vehicles' : 'Active Drivers'} <span style="font-size:11px;color:var(--ink3);font-weight:400">${isTaxi ? activeShifts.length + '/' + ASSETS.length + ' (Echo Shift)' : svcDrivers + ' online today'}</span></div>
-        <button class="btn btn-s btn-xs" onclick="goS('assets')">View all →</button>
+        <div style="font-size:14px;font-weight:700">
+          ${showVehiclePanel
+            ? 'Fleet Vehicles <span style="font-size:11px;color:var(--ink3);font-weight:400">' + activeShifts.length + '/' + ASSETS.length + ' active today</span>'
+            : 'Service Summary <span style="font-size:11px;color:var(--ink3);font-weight:400">' + svcDrivers + ' drivers online</span>'
+          }
+        </div>
+        ${showVehiclePanel ? '<button class="btn btn-s btn-xs" onclick="goS(\'assets\')">View all →</button>' : ''}
       </div>
-      ${!isTaxi
-        ? '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:24px;text-align:center"><div style="font-size:13px;font-weight:600;color:var(--ink2);margin-bottom:6px">' + svcDrivers.toLocaleString() + ' drivers active today</div><div style="font-size:11px;color:var(--ink3)">Per-driver shift detail available for Taxi service only</div></div>'
-        : '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
-          + (activeShifts.length === 0
-            ? '<div class="empty" style="padding:24px"><div class="empty-icon">🚗</div><div class="empty-title">No active shifts</div></div>'
-            : activeShifts.slice(0, 10).map(s => {
-                const asset = assetById(s.asset_id);
-                const pctRev = asset ? Math.round(s.gross_revenue / getAssetTarget(asset.asset_id) * 100) : 0;
-                const barCol = pctRev >= 80 ? 'var(--green)' : pctRev >= 50 ? 'var(--amber)' : 'var(--red)';
-                return '<div class="shift-item" onclick="openAssetDrawer(\'' + s.asset_id + '\')">'
-                  + '<div style="width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;box-shadow:0 0 6px var(--green)"></div>'
-                  + '<div style="font-family:var(--f-mono);font-size:11px;font-weight:700;width:72px">' + (asset ? asset.plate : '—') + '</div>'
-                  + '<div style="flex:1"><div style="font-size:11px;color:var(--ink2)">' + (s.driver_name || 'Driver') + '</div>'
-                  + '<div style="height:3px;background:var(--border);border-radius:2px;margin-top:4px;overflow:hidden"><div style="height:100%;width:' + Math.min(100,pctRev) + '%;background:' + barCol + ';border-radius:2px"></div></div></div>'
-                  + '<div style="font-family:var(--f-mono);font-size:11px;font-weight:700;color:var(--green)">' + fP(s.gross_revenue) + '</div>'
-                  + '<div style="font-size:10px;color:var(--ink3);width:30px;text-align:right">' + pctRev + '%</div>'
-                  + '</div>';
-              }).join('')
-          )
-          + (activeShifts.length > 10 ? '<div style="padding:8px 16px;text-align:center;font-size:11px;color:var(--ink3)">+' + (activeShifts.length - 10) + ' more shifts</div>' : '')
-          + '</div>'
+
+      ${showVehiclePanel ? (() => {
+        var vehicleMap = {};
+        ASHIFTS.forEach(function(s) {
+          var key = s.asset_id;
+          if (!vehicleMap[key]) vehicleMap[key] = { am: null, pm: null, total: 0 };
+          var startHour = s.started_at ? parseInt(s.started_at.split('T')[1] || s.started_at.split(' ')[1] || '0') : 0;
+          if (isNaN(startHour)) startHour = 0;
+          var isPm = startHour >= 12;
+          if (isPm) vehicleMap[key].pm = s;
+          else vehicleMap[key].am = s;
+          vehicleMap[key].total += s.gross_revenue || 0;
+        });
+
+        return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;max-height:480px;overflow-y:auto">'
+          + ASSETS.map(function(asset) {
+            var vd = vehicleMap[asset.asset_id] || { am: null, pm: null, total: 0 };
+            var tgt = getAssetTarget(asset.asset_id) || 3000;
+            var amRev = vd.am ? (vd.am.gross_revenue || 0) : 0;
+            var pmRev = vd.pm ? (vd.pm.gross_revenue || 0) : 0;
+            var total = vd.total;
+            var amPct = Math.min(100, Math.round(amRev / tgt * 100));
+            var pmPct = Math.min(100 - amPct, Math.round(pmRev / tgt * 100));
+            var totalPct = Math.min(100, Math.round(total / tgt * 100));
+            var isActive = !!ASHIFTS.find(function(s) { return s.asset_id === asset.asset_id && s.status === 'active'; });
+            var amDriver = vd.am ? (vd.am.driver_name || '—') : null;
+            var pmDriver = vd.pm ? (vd.pm.driver_name || '—') : null;
+            var statusCol = total === 0 ? 'var(--ink4)' : totalPct >= 80 ? 'var(--green)' : totalPct >= 50 ? 'var(--amber)' : 'var(--red)';
+
+            return '<div style="padding:8px 12px;border-bottom:1px solid var(--border);'
+              + (total === 0 ? 'opacity:.45;' : '') + '">'
+              + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">'
+              + '<div style="width:7px;height:7px;border-radius:50%;background:' + (isActive ? 'var(--green)' : total > 0 ? 'var(--amber)' : 'var(--border)') + ';flex-shrink:0' + (isActive ? ';box-shadow:0 0 5px var(--green)' : '') + '"></div>'
+              + '<div style="font-family:var(--f-mono);font-size:11px;font-weight:700;width:68px">' + asset.plate + '</div>'
+              + '<div style="flex:1;font-size:10px;color:var(--ink3);overflow:hidden;white-space:nowrap;text-overflow:ellipsis">'
+              + (amDriver && pmDriver ? amDriver + ' · ' + pmDriver : amDriver || pmDriver || 'No shift today')
+              + '</div>'
+              + '<div style="font-family:var(--f-mono);font-size:11px;font-weight:700;color:' + statusCol + '">' + (total > 0 ? fP(total) : '—') + '</div>'
+              + '<div style="font-size:10px;color:var(--ink3);width:28px;text-align:right">' + (total > 0 ? totalPct + '%' : '') + '</div>'
+              + '</div>'
+              + '<div style="position:relative;height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-left:15px">'
+              + (amPct > 0 ? '<div style="position:absolute;left:0;height:100%;width:' + amPct + '%;background:var(--green);border-radius:3px 0 0 3px" title="AM: ' + fP(amRev) + '"></div>' : '')
+              + (pmPct > 0 ? '<div style="position:absolute;left:' + amPct + '%;height:100%;width:' + pmPct + '%;background:var(--accent)" title="PM: ' + fP(pmRev) + '"></div>' : '')
+              + '<div style="position:absolute;left:50%;top:0;height:100%;width:1px;background:rgba(255,255,255,.2)" title="Midday"></div>'
+              + '</div>'
+              + (total > 0 ? '<div style="display:flex;gap:10px;margin-left:15px;margin-top:3px">'
+                + (amRev > 0 ? '<div style="font-size:9px;color:var(--green)">AM ' + fP(amRev) + (amDriver ? ' · ' + amDriver.split(' ')[0] : '') + '</div>' : '')
+                + (pmRev > 0 ? '<div style="font-size:9px;color:var(--accent)">PM ' + fP(pmRev) + (pmDriver ? ' · ' + pmDriver.split(' ')[0] : '') + '</div>' : '')
+                + '</div>' : '')
+              + '</div>';
+          }).join('')
+          + '</div>';
+      })()
+      : '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:20px">'
+        + '<div style="text-align:center;margin-bottom:16px">'
+        + '<div style="font-size:28px;font-weight:800;font-family:var(--f-mono);color:var(--green)">' + trips.toLocaleString() + '</div>'
+        + '<div style="font-size:11px;color:var(--ink3);margin-top:2px">completed trips today</div>'
+        + '</div>'
+        + '<div style="display:flex;flex-direction:column;gap:8px">'
+        + '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:11px">'
+        + '<span style="color:var(--ink3)">Active drivers</span><span style="font-weight:600">' + svcDrivers + '</span></div>'
+        + '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:11px">'
+        + '<span style="color:var(--ink3)">Avg fare</span><span style="font-weight:600;font-family:var(--f-mono)">' + fP(avgFare) + '</span></div>'
+        + '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:11px">'
+        + '<span style="color:var(--ink3)">Completion rate</span><span style="font-weight:600;color:' + (svcCompPct>=90?'var(--green)':svcCompPct>=75?'var(--amber)':'var(--red)') + '">' + svcCompPct + '%</span></div>'
+        + '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:11px">'
+        + '<span style="color:var(--ink3)">Cancelled</span><span style="font-weight:600;color:' + (svcCancelled>0?'var(--red)':'var(--ink3)') + '">' + svcCancelled.toLocaleString() + '</span></div>'
+        + '</div>'
+        + '<div style="margin-top:12px;padding:10px;background:var(--surface);border-radius:var(--rs);font-size:10px;color:var(--ink3);text-align:center">Per-vehicle shift detail available for Taxi service</div>'
+        + '</div>'
       }
     </div>
 
