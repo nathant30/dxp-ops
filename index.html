@@ -981,9 +981,13 @@ function dbRefreshAll() {
 
   dbCall('today_shifts', function(data, today) {
     if (data && data.length) {
-      ASHIFTS = data.map(function(r) { return { rider_id: String(r.rider_id || ''), date: today, status: r.status || 'completed', trips: Number(r.trips || 0), revenue: Number(r.revenue || 0), started_at: r.started_at || null, ended_at: r.ended_at || null }; });
+      ASHIFTS = data.map(function(r) {
+        var asset = ASSETS.find(function(a) { return String(a.vehicle_id) === String(r.vehicle_id); });
+        return { rider_id: String(r.rider_id || ''), asset_id: asset ? asset.asset_id : null, date: today, status: r.status || 'completed', trips: Number(r.trips || 0), gross_revenue: Number(r.revenue || 0), revenue: Number(r.revenue || 0), started_at: r.started_at || null, ended_at: r.ended_at || null };
+      });
       DATA_DATE = today;
       if (typeof updateTopbar === 'function') updateTopbar();
+      if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} }
     }
     _done(!!(data && data.length));
   });
@@ -1465,7 +1469,8 @@ function buildCmd() {
   const target = ASSETS.reduce((s, a) => s + getAssetTarget(a.asset_id), 0);
   const pct = target > 0 ? Math.round(rev / target * 100) : 0;
   const pctCol = pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--amber)' : 'var(--red)';
-  const trips = ASHIFTS.filter(s => s.date === DATA_DATE).reduce((s, sh) => s + (sh.trips || 0), 0);
+  const _ashiftTrips = ASHIFTS.filter(s => s.date === DATA_DATE).reduce((s, sh) => s + (sh.trips || 0), 0);
+  const trips = _ashiftTrips || (window.DB_TODAY ? Number(window.DB_TODAY.total_trips) : 0);
   const activeShifts = ASHIFTS.filter(s => s.date === DATA_DATE && s.status === 'active');
   const completedShifts = ASHIFTS.filter(s => s.date === DATA_DATE && s.status === 'completed');
   const allAlerts = getAlerts();
