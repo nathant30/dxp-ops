@@ -3417,7 +3417,20 @@ function renderServiceStrip() {
       + '<div style="font-size:10px;color:var(--ink3)">Completion <span style="color:' + (stats.compPct>=90?'var(--green)':stats.compPct>=75?'var(--amber)':'var(--red)') + ';font-weight:700;margin-left:4px">' + stats.compPct + '%</span></div>'
       + '<div style="font-size:10px;color:var(--ink3)">Avg fare <span style="color:var(--ink1);font-weight:700;font-family:var(--f-mono);margin-left:4px">₱' + stats.avgFare.toLocaleString() + '</span></div>'
       + '</div>'
-  );
+  )
+  + '<div style="display:flex;align-items:center;gap:6px;padding:0 14px;margin-left:8px;border-left:1px solid var(--border);flex-shrink:0">'
+  + '<span style="font-size:9px;color:var(--ink4)">📅 Op day</span>'
+  + '<span style="font-size:9px;font-weight:600;color:var(--ink3);font-family:var(--f-mono)">'
+  + (function() {
+      var h = (OPS_DAY_CONFIG && OPS_DAY_CONFIG.day_start_hour) || 4;
+      var endH = h + 22;
+      var pad = function(n) { return n < 10 ? '0' + n : String(n); };
+      var startStr = pad(h) + ':00';
+      var endStr = endH >= 24 ? pad(endH - 24) + ':00+1' : pad(endH) + ':00';
+      return startStr + ' → ' + endStr + ' PHT';
+    })()
+  + '</span>'
+  + '</div>';
 }
 
 function setActiveService(id) {
