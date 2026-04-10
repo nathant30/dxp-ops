@@ -925,11 +925,11 @@ function dbCall(type, callback) {
   })
   .then(function(r) { return r.json(); })
   .then(function(res) {
-    if (res.error) { console.warn('DB error [' + type + ']:', res.error); return null; }
+    if (res.error) { console.warn('DB error [' + type + ']:', res.error); if (callback) callback(null, null); return null; }
     if (callback) callback(res.data, res.today);
     return res.data;
   })
-  .catch(function(e) { console.warn('DB fetch failed [' + type + ']:', e.message); return null; });
+  .catch(function(e) { console.warn('DB fetch failed [' + type + ']:', e.message); if (callback) callback(null, null); return null; });
 }
 
 // Refresh all live data from Databricks — called on manual Refresh or auto-refresh
