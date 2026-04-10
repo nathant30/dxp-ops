@@ -949,7 +949,6 @@ function dbRefreshAll() {
   DB_LOADING = true;
   updateStaleIndicator(true);
 
-  // Track completion of all 4 calls — reset spinner regardless of success/failure
   var _pending = 4;
   var _anyData = false;
   function _done(gotData) {
@@ -958,78 +957,36 @@ function dbRefreshAll() {
     if (_pending <= 0) {
       DB_LOADING = false;
       updateStaleIndicator(false);
-      if (_anyData) {
-        toast('✓ Live data updated from Databricks');
-      } else {
-        toast('Refresh complete — no new data returned');
-      }
+      toast(_anyData ? '✓ Live data updated from Databricks' : 'Refresh complete — no new data returned');
     }
   }
 
-  // Timeout fallback — reset after 20s no matter what
   setTimeout(function() {
-    if (DB_LOADING) {
-      DB_LOADING = false;
-      updateStaleIndicator(false);
-      toast('Refresh timed out — check edge function');
-    }
+    if (DB_LOADING) { DB_LOADING = false; updateStaleIndicator(false); toast('Refresh timed out'); }
   }, 20000);
 
-  // 1. Today overview (OPS tab KPIs)
   dbCall('today_overview', function(data, today) {
-    if (data) {
-      DB_TODAY = data;
-      DB_DATA_DATE = today;
-      if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} }
-    }
+    if (data) { DB_TODAY = data; DB_DATA_DATE = today; if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} } }
     _done(!!data);
   });
 
-  // 2. Today shifts (updates ASHIFTS)
   dbCall('today_shifts', function(data, today) {
     if (data && data.length) {
-      ASHIFTS = data.map(function(r) {
-        return {
-          rider_id: String(r.rider_id || ''),
-          date: today,
-          status: r.status || 'completed',
-          trips: Number(r.trips || 0),
-          revenue: Number(r.revenue || 0),
-          started_at: r.started_at || null,
-          ended_at: r.ended_at || null
-        };
-      });
+      ASHIFTS = data.map(function(r) { return { rider_id: String(r.rider_id || ''), date: today, status: r.status || 'completed', trips: Number(r.trips || 0), revenue: Number(r.revenue || 0), started_at: r.started_at || null, ended_at: r.ended_at || null }; });
       DATA_DATE = today;
       if (typeof updateTopbar === 'function') updateTopbar();
     }
     _done(!!(data && data.length));
   });
 
-  // 3. Revenue by asset
   dbCall('revenue_by_asset', function(data) {
-    if (data && data.length) {
-      DB_ASSET_REV = {};
-      data.forEach(function(r) {
-        DB_ASSET_REV[String(r.asset_id)] = Number(r.revenue || 0);
-      });
-      if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} }
-    }
+    if (data && data.length) { DB_ASSET_REV = {}; data.forEach(function(r) { DB_ASSET_REV[String(r.asset_id)] = Number(r.revenue || 0); }); if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} } }
     _done(!!(data && data.length));
   });
 
-  // 4. Driver perf for Finance tab
   dbCall('driver_perf', function(data) {
     if (data && data.length) {
-      data.forEach(function(r) {
-        var d = D4W.find(function(x) { return String(x.id) === String(r.driver_id); });
-        if (d) {
-          d.trips = Number(r.trips || 0);
-          d.rev   = Number(r.revenue || 0);
-          d.days  = Number(r.days || 0);
-          d.rpd   = d.days > 0 ? Math.round(d.rev / d.days) : 0;
-          d.rph   = d.rpd > 0 ? Math.round(d.rpd / 8.5) : 0;
-        }
-      });
+      data.forEach(function(r) { var d = D4W.find(function(x) { return String(x.id) === String(r.driver_id); }); if (d) { d.trips = Number(r.trips || 0); d.rev = Number(r.revenue || 0); d.days = Number(r.days || 0); d.rpd = d.days > 0 ? Math.round(d.rev / d.days) : 0; d.rph = d.rpd > 0 ? Math.round(d.rpd / 8.5) : 0; } });
       if (typeof buildAllDrivers === 'function') buildAllDrivers();
       _lastSuccessfulRefresh = Date.now();
     }
