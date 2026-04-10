@@ -1545,26 +1545,29 @@ function buildCmd() {
       <!-- APP COMPLETION RATE -->
         <div style="background:rgba(255,255,255,.04);padding:20px 24px">
           ${(() => {
-            const completed = window.DB_TODAY ? Number(window.DB_TODAY.total_trips || 0) : trips;
-            const cancelled = window.DB_TODAY ? Number(window.DB_TODAY.total_cancelled || 0) : 0;
-            const expired   = window.DB_TODAY ? Number(window.DB_TODAY.total_expired  || 0) : 0;
-            const requested = completed + cancelled + expired;
-            const compPct   = requested > 0 ? Math.round(completed / requested * 100) : 0;
-            const compCol   = compPct >= 90 ? '#34D399' : compPct >= 75 ? '#FCD34D' : '#F87171';
+            // app_completed / app_cancelled / app_expired come from the updated edge fn
+            // (BookingFeeAmount > 0 for completed; XpressUserId IS NOT NULL for cancelled/expired)
+            const hasAppData = window.DB_TODAY && window.DB_TODAY.app_completed !== undefined;
+            const appCompleted = hasAppData ? Number(window.DB_TODAY.app_completed || 0) : null;
+            const appCancelled = hasAppData ? Number(window.DB_TODAY.app_cancelled || 0) : null;
+            const appExpired   = hasAppData ? Number(window.DB_TODAY.app_expired   || 0) : null;
+            const appRequested = hasAppData ? (appCompleted + appCancelled + appExpired) : null;
+            const compPct      = (hasAppData && appRequested > 0) ? Math.round(appCompleted / appRequested * 100) : null;
+            const compCol      = compPct === null ? 'rgba(255,255,255,.4)' : compPct >= 90 ? '#34D399' : compPct >= 75 ? '#FCD34D' : '#F87171';
             return `<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">App Completion Rate</div>
-            <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:${compCol};letter-spacing:-1px;line-height:1">${compPct}%</div>
+            <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:${compCol};letter-spacing:-1px;line-height:1">${compPct !== null ? compPct+'%' : '—'}</div>
             <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
               <div style="display:flex;justify-content:space-between;font-size:10px">
-                <span style="color:rgba(255,255,255,.45)">Completed</span>
-                <span style="color:#34D399;font-weight:600">${completed.toLocaleString()}</span>
+                <span style="color:rgba(255,255,255,.45)">App completed</span>
+                <span style="color:#34D399;font-weight:600">${appCompleted !== null ? appCompleted.toLocaleString() : '—'}</span>
               </div>
               <div style="display:flex;justify-content:space-between;font-size:10px">
-                <span style="color:rgba(255,255,255,.45)">Cancelled</span>
-                <span style="color:${cancelled>0?'#F87171':'rgba(255,255,255,.8)'};font-weight:600">${cancelled.toLocaleString()}</span>
+                <span style="color:rgba(255,255,255,.45)">App cancelled</span>
+                <span style="color:${(appCancelled !== null && appCancelled > 0) ? '#F87171' : 'rgba(255,255,255,.8)'};font-weight:600">${appCancelled !== null ? appCancelled.toLocaleString() : '—'}</span>
               </div>
               <div style="display:flex;justify-content:space-between;font-size:10px">
-                <span style="color:rgba(255,255,255,.45)">Total requested</span>
-                <span style="color:rgba(255,255,255,.8);font-weight:600">${requested.toLocaleString()}</span>
+                <span style="color:rgba(255,255,255,.45)">Total app trips</span>
+                <span style="color:rgba(255,255,255,.8);font-weight:600">${appRequested !== null ? appRequested.toLocaleString() : '—'}</span>
               </div>
             </div>`;
           })()}
