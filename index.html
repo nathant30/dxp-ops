@@ -1488,27 +1488,93 @@ function buildCmd() {
   el.innerHTML = `
   <!-- Revenue Intel Hero -->
   <div class="rev-intel">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
-      <div>
-        <div class="ri-label">Fleet Revenue · ${new Date().toLocaleDateString('en-PH',{weekday:'long',month:'short',day:'numeric',timeZone:'Asia/Manila'})}</div>
-        <div class="ri-val">${fP(rev)}</div>
-        <div class="ri-meta">${trips.toLocaleString()} trips · ₱${avgFare.toLocaleString()}/trip avg · ${activeShifts.length} shifts active</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(255,255,255,.08);border-radius:var(--rxl);overflow:hidden">
+
+      <!-- XPRESS EARNINGS -->
+      <div style="background:rgba(255,255,255,.04);padding:20px 24px">
+        <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Xpress Earnings</div>
+        <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:#FCD34D;letter-spacing:-1px;line-height:1">${fP(rev)}</div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;justify-content:space-between;font-size:10px">
+            <span style="color:rgba(255,255,255,.45)">Daily target</span>
+            <span style="color:rgba(255,255,255,.8);font-weight:600">${fP(target)}</span>
+          </div>
+          <div style="height:4px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden">
+            <div style="height:100%;width:${Math.min(100,pct)}%;background:${pct>=100?'#34D399':pct>=80?'#FCD34D':'#F87171'};border-radius:2px"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px">
+            <span style="color:rgba(255,255,255,.45)">Rev/hr</span>
+            <span style="color:rgba(255,255,255,.8);font-weight:600">${fP(Math.round(rev/8.5))}</span>
+          </div>
+        </div>
       </div>
-      <div style="text-align:right">
-        <div style="font-size:38px;font-weight:800;font-family:var(--f-mono);color:${pctCol};line-height:1">${pct}%</div>
-        <div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:4px">of ₱${(target/1000).toFixed(0)}K daily target</div>
-        ${gap > 0 ? `<div style="font-size:10px;color:var(--amber);margin-top:2px">Gap: ${fP(gap)} · ~${Math.ceil(gap/avgFare)} more trips needed</div>` : '<div style="font-size:10px;color:#6EE7B7;margin-top:2px">✓ Target exceeded!</div>'}
+
+      <!-- COMPLETED TRIPS -->
+      <div style="background:rgba(255,255,255,.04);padding:20px 24px">
+        <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Completed Trips</div>
+        <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:#fff;letter-spacing:-1px;line-height:1">${trips.toLocaleString()}</div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;justify-content:space-between;font-size:10px">
+            <span style="color:rgba(255,255,255,.45)">Avg fare</span>
+            <span style="color:rgba(255,255,255,.8);font-weight:600">${fP(avgFare)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px">
+            <span style="color:rgba(255,255,255,.45)">Active shifts</span>
+            <span style="color:rgba(255,255,255,.8);font-weight:600">${activeShifts.length} running</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px">
+            <span style="color:rgba(255,255,255,.45)">Shifts done</span>
+            <span style="color:rgba(255,255,255,.8);font-weight:600">${completedShifts.length} completed</span>
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="ri-bar" style="margin:16px 0 12px">
-      <div class="ri-bar-fill" style="width:${Math.min(100,pct)}%;background:${pctCol === 'var(--green)' ? 'linear-gradient(90deg,#059669,#34D399)' : pctCol === 'var(--amber)' ? 'linear-gradient(90deg,#D97706,#FCD34D)' : 'linear-gradient(90deg,#DC2626,#F87171)'}"></div>
-    </div>
-    <div class="ri-chips">
-      <div class="ri-chip hi">✓ ${completedShifts.length} shifts done</div>
-      <div class="ri-chip">🟢 ${activeShifts.length} running</div>
-      <div class="ri-chip">${critAlerts.length ? `🔴 ${critAlerts.length} critical` : '✓ No criticals'}</div>
-      <div class="ri-chip">${warnAlerts.length} warnings</div>
-      <div class="ri-chip">${ASSETS.length} vehicles</div>
+
+      <!-- APP COMPLETION % -->
+      <div style="background:rgba(255,255,255,.04);padding:20px 24px">
+        <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">App Completion %</div>
+        ${(() => {
+          const critAlertCount = critAlerts.length;
+          const warnAlertCount = warnAlerts.length;
+          const compPct = Math.max(0, Math.min(100, Math.round(100 - (critAlertCount * 5) - (warnAlertCount * 2))));
+          const compCol = compPct >= 90 ? '#34D399' : compPct >= 70 ? '#FCD34D' : '#F87171';
+          return `<div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:${compCol};letter-spacing:-1px;line-height:1">${compPct}%</div>
+          <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
+            <div style="display:flex;justify-content:space-between;font-size:10px">
+              <span style="color:rgba(255,255,255,.45)">Critical alerts</span>
+              <span style="color:${critAlertCount>0?'#F87171':'#34D399'};font-weight:600">${critAlertCount}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:10px">
+              <span style="color:rgba(255,255,255,.45)">Warnings</span>
+              <span style="color:${warnAlertCount>0?'#FCD34D':'#34D399'};font-weight:600">${warnAlertCount}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:10px">
+              <span style="color:rgba(255,255,255,.45)">Vehicles</span>
+              <span style="color:rgba(255,255,255,.8);font-weight:600">${ASSETS.length} total</span>
+            </div>
+          </div>`;
+        })()}
+      </div>
+
+      <!-- DAILY TARGET % -->
+      <div style="background:rgba(255,255,255,.04);padding:20px 24px">
+        <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Daily Target %</div>
+        <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:${pctCol};letter-spacing:-1px;line-height:1">${pct}%</div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;justify-content:space-between;font-size:10px">
+            <span style="color:rgba(255,255,255,.45)">Status</span>
+            <span style="color:${pct>=100?'#34D399':pct>=80?'#FCD34D':'#F87171'};font-weight:600">${pct>=100?'✓ Exceeded':pct>=80?'On track':'Behind'}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px">
+            <span style="color:rgba(255,255,255,.45)">Gap</span>
+            <span style="color:rgba(255,255,255,.8);font-weight:600">${gap>0?'-'+fP(gap):'✓ Done'}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px">
+            <span style="color:rgba(255,255,255,.45)">Trips to go</span>
+            <span style="color:rgba(255,255,255,.8);font-weight:600">${gap>0&&avgFare>0?'~'+Math.ceil(gap/avgFare)+' more':'✓'}</span>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
