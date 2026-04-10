@@ -949,7 +949,7 @@ function dbRefreshAll() {
   DB_LOADING = true;
   updateStaleIndicator(true);
 
-  var _pending = 5;
+  var _pending = 6;
   var _anyData = false;
   function _done(gotData) {
     if (gotData) _anyData = true;
@@ -1038,6 +1038,25 @@ function dbRefreshAll() {
     }
     _done(!!(data && data.length));
   });
+
+  dbCall('rideshare_driver_perf', function(data) {
+    if (data && data.length) {
+      DB_RIDESHARE_PERF = data.map(function(r) {
+        return {
+          id: String(r.driver_id || ''),
+          name: String(r.driver_name || 'Driver'),
+          vtid: String(r.vehicle_type_id || ''),
+          trips: Number(r.trips || 0),
+          gtv: Number(r.gtv || 0),
+          commission: Number(r.commission || 0),
+          days: Number(r.days || 0),
+          avg_fare: Number(r.avg_fare || 0),
+          cpd: Number(r.days) > 0 ? Math.round(Number(r.commission || 0) / Number(r.days)) : 0,
+        };
+      });
+    }
+    _done(!!(data && data.length));
+  });
 }
 
 // Global storage for live data
@@ -1052,6 +1071,18 @@ var OPS_DAY_CONFIG = {
   schedule_change_date: '2025-05-01',
 };
 var DB_SERVICES = {}; // keyed by vehicleTypeId, populated by services_overview query
+var DB_RIDESHARE_PERF = []; // rideshare driver MTD performance
+
+// Registered partner counts from Databricks (as of April 2026)
+var REGISTERED_PARTNERS = { '16': 194, '1': 189, '2': 111, '3': 67, '10': 46 };
+
+var SVC_META = {
+  '16': { label: 'Taxi',         icon: '🚖', commission: false, owned: true  },
+  '1':  { label: 'Moto Regular', icon: '🛵', commission: true,  owned: false },
+  '2':  { label: 'Go Car',       icon: '🚗', commission: true,  owned: false },
+  '3':  { label: 'Go SUV',       icon: '🚙', commission: true,  owned: false },
+  '10': { label: 'e-Trike',      icon: '🛺', commission: false, owned: false },
+};
 
 function getServiceData(serviceId) {
   var tabs = {
@@ -2117,6 +2148,59 @@ let FLEET_FILTER_KEY = 'all';
 let FLEET_SEARCH = '';
 
 function buildFleet() {
+  if (ACTIVE_SERVICE !== 'taxi' && ACTIVE_SERVICE !== 'all') {
+    const el = document.getElementById('fleet-grid');
+    if (!el) return;
+    var svcVtidMap3 = { 'rideshare': null, 'moto-regular': '1', 'go-car': '2', 'go-suv': '3' };
+    var fleetVtid = svcVtidMap3[ACTIVE_SERVICE];
+    var fleetDrivers = fleetVtid
+      ? DB_RIDESHARE_PERF.filter(function(d){ return d.vtid === fleetVtid; })
+      : DB_RIDESHARE_PERF;
+    var svc  = DB_SERVICES[fleetVtid || '1'] || {};
+    var meta = SVC_META[fleetVtid || '1'] || {};
+    el.innerHTML = '<div style="padding:var(--s4)">'
+      + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--s4);margin-bottom:var(--s4)">'
+      + [
+          ['Active Today', (Number(svc.active_drivers||0)).toLocaleString() + ' / ' + (REGISTERED_PARTNERS[fleetVtid||'1']||0), 'drivers online', 'var(--green)'],
+          ['Trips Today',  Number(svc.trips||0).toLocaleString(), 'completed trips', 'var(--accent)'],
+          ['GTV Today',    '₱'+Number(svc.gtv||0).toLocaleString(), 'gross transaction value', 'var(--amber)'],
+          ['Commission',   '₱'+Number(svc.commission||0).toLocaleString(), 'Xpress earnings (20%)', 'var(--green)'],
+        ].map(function(c){ return '<div class="kpi-card"><div class="kpi-label">'+c[0]+'</div><div class="kpi-val">'+c[1]+'</div><div class="kpi-sub">'+c[2]+'</div><div class="kpi-bar" style="background:'+c[3]+'"></div></div>'; }).join('')
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);margin-bottom:var(--s4)">'
+      + (function() {
+          var t=Number(svc.trips||0),c=Number(svc.cancelled||0),e=Number(svc.expired||0),req=t+c+e;
+          var comp=req>0?Math.round(t/req*100):0;
+          var col=comp>=90?'var(--green)':comp>=75?'var(--amber)':'var(--red)';
+          return '<div class="card" style="padding:20px 24px"><div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;margin-bottom:8px">App Completion Rate</div>'
+            +'<div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:'+col+'">'+comp+'%</div>'
+            +'<div style="font-size:11px;color:var(--ink3);margin-top:8px">'+t.toLocaleString()+' completed · '+c.toLocaleString()+' cancelled · '+e.toLocaleString()+' expired</div></div>';
+        })()
+      + '<div class="card" style="padding:20px 24px"><div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;margin-bottom:8px">Avg Fare per Trip</div>'
+      + '<div style="font-size:32px;font-weight:800;font-family:var(--f-mono)">₱' + Number(svc.avg_fare||0).toLocaleString() + '</div>'
+      + '<div style="font-size:11px;color:var(--ink3);margin-top:8px">Avg commission per driver/day: ₱' + (fleetDrivers.length>0?Math.round(Number(svc.commission||0)/Math.max(Number(svc.active_drivers||1),1)).toLocaleString():'—') + '</div></div>'
+      + '</div>'
+      + '<div style="font-size:14px;font-weight:700;margin-bottom:10px">Active Partners <span style="font-size:11px;color:var(--ink3);font-weight:400">month-to-date performance</span></div>'
+      + '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
+      + '<div style="display:grid;grid-template-columns:1fr 60px 100px 100px 80px;padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase">'
+      + '<span>Driver</span><span style="text-align:right">Days</span><span style="text-align:right">Trips</span><span style="text-align:right">GTV</span><span style="text-align:right">Commission</span>'
+      + '</div>'
+      + (fleetDrivers.length === 0
+        ? '<div style="padding:40px;text-align:center;color:var(--ink3)">Loading partner data…</div>'
+        : fleetDrivers.slice(0,40).map(function(d,i){
+            return '<div style="display:grid;grid-template-columns:1fr 60px 100px 100px 80px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:12px;align-items:center' + (i%2===0?'':';background:var(--surface)') + '">'
+              + '<div><div style="font-weight:600">'+d.name+'</div><div style="font-size:10px;color:var(--ink3)">₱'+d.avg_fare.toLocaleString()+' avg fare</div></div>'
+              + '<div style="text-align:right;color:var(--ink3)">'+d.days+'d</div>'
+              + '<div style="text-align:right;font-family:var(--f-mono)">'+d.trips.toLocaleString()+'</div>'
+              + '<div style="text-align:right;font-family:var(--f-mono)">₱'+d.gtv.toLocaleString()+'</div>'
+              + '<div style="text-align:right;font-family:var(--f-mono);color:var(--green);font-weight:600">₱'+d.commission.toLocaleString()+'</div>'
+              + '</div>';
+          }).join('')
+        + (fleetDrivers.length>40?'<div style="padding:10px;text-align:center;font-size:11px;color:var(--ink3)">+' + (fleetDrivers.length-40) + ' more</div>':'')
+      )
+      + '</div></div>';
+    return;
+  }
   renderFleetGrid();
 }
 
@@ -2193,6 +2277,51 @@ let ASSET_FILTER_KEY = 'all';
 let ASSET_SEARCH = '';
 
 function buildAssets() {
+  if (ACTIVE_SERVICE !== 'taxi' && ACTIVE_SERVICE !== 'all') {
+    const el = document.getElementById('asset-grid');
+    if (!el) return;
+    var svcVtidMap = { 'rideshare': ['1','2','3'], 'moto-regular': ['1'], 'go-car': ['2'], 'go-suv': ['3'] };
+    var vtids = svcVtidMap[ACTIVE_SERVICE] || ['1'];
+    var svcData = vtids.map(function(id) {
+      var s = DB_SERVICES[id] || {};
+      var m = SVC_META[id] || {};
+      var registered = REGISTERED_PARTNERS[id] || 0;
+      var active = Number(s.active_drivers || 0);
+      return { id: id, label: m.label, icon: m.icon, registered: registered, active: active, trips: Number(s.trips||0), gtv: Number(s.gtv||0), commission: Number(s.commission||0), avg_fare: Number(s.avg_fare||0) };
+    });
+    el.innerHTML = '<div style="padding:var(--s4)">'
+      + '<div style="font-size:16px;font-weight:700;margin-bottom:4px">Registered Partners</div>'
+      + '<div style="font-size:11px;color:var(--ink3);margin-bottom:20px">Driver-owned vehicles · Calendar day data</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--s4);margin-bottom:24px">'
+      + svcData.map(function(s) {
+          var activePct = s.registered > 0 ? Math.round(s.active/s.registered*100) : 0;
+          return '<div class="card" style="padding:20px 24px">'
+            + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'
+            + '<span style="font-size:28px">' + s.icon + '</span>'
+            + '<div><div style="font-size:15px;font-weight:700">' + s.label + '</div>'
+            + '<div style="font-size:11px;color:var(--ink3)">Driver-owned vehicles</div></div>'
+            + '</div>'
+            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">'
+            + '<div style="text-align:center;padding:12px;background:var(--surface);border-radius:var(--rs)"><div style="font-size:22px;font-weight:800;font-family:var(--f-mono)">' + s.registered + '</div><div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px">Registered</div></div>'
+            + '<div style="text-align:center;padding:12px;background:var(--surface);border-radius:var(--rs)"><div style="font-size:22px;font-weight:800;font-family:var(--f-mono);color:var(--green)">' + s.active + '</div><div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px">Active Today</div></div>'
+            + '</div>'
+            + '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:8px"><div style="height:100%;width:' + activePct + '%;background:var(--green);border-radius:2px"></div></div>'
+            + '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink3);margin-bottom:12px"><span>' + activePct + '% active today</span><span>' + (s.registered-s.active) + ' offline</span></div>'
+            + '<div style="border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:6px">'
+            + '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:var(--ink3)">Trips today</span><span style="font-weight:600">' + s.trips.toLocaleString() + '</span></div>'
+            + '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:var(--ink3)">GTV today</span><span style="font-weight:600;font-family:var(--f-mono)">₱' + s.gtv.toLocaleString() + '</span></div>'
+            + '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:var(--ink3)">Xpress commission</span><span style="font-weight:600;color:var(--green);font-family:var(--f-mono)">₱' + s.commission.toLocaleString() + '</span></div>'
+            + '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:var(--ink3)">Avg fare</span><span style="font-weight:600;font-family:var(--f-mono)">₱' + s.avg_fare.toLocaleString() + '</span></div>'
+            + '</div>'
+            + '</div>';
+        }).join('')
+      + '</div>'
+      + '<div style="padding:14px 16px;background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.15);border-radius:var(--rl);font-size:11px;color:var(--ink3)">'
+      + '💡 Registered partner counts reflect drivers who completed at least one trip in the last 30 days. Real-time registration data will sync when Xpress partner DB is connected.'
+      + '</div>'
+      + '</div>';
+    return;
+  }
   renderAssetGrid2();
 }
 
@@ -4306,6 +4435,17 @@ function calcPodHealth(podId) {
 function buildTeams() {
   const el = document.getElementById('teams-content');
   if (!el) return;
+  if (ACTIVE_SERVICE !== 'taxi' && ACTIVE_SERVICE !== 'all') {
+    var _svcVtid = { 'rideshare': '1', 'moto-regular': '1', 'go-car': '2', 'go-suv': '3' }[ACTIVE_SERVICE];
+    var _svcMeta = SVC_META[_svcVtid] || {};
+    el.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:400px;text-align:center;padding:60px 24px">'
+      + '<div style="font-size:48px;margin-bottom:16px">👥</div>'
+      + '<div style="font-size:18px;font-weight:700;color:var(--ink1);margin-bottom:8px">Teams — Taxi Fleet Only</div>'
+      + '<div style="font-size:13px;color:var(--ink3);max-width:380px;line-height:1.7;margin-bottom:20px">Pod and team management applies to salaried Taxi drivers under the DXP program. ' + (_svcMeta.label || 'Partner') + ' partners are self-managed.</div>'
+      + '<button class="btn btn-s" onclick="setActiveService(\'taxi\')">Switch to Taxi</button>'
+      + '</div>';
+    return;
+  }
   const pods = Object.values(PODS || {});
   const unassigned = D4W.filter(d => !Object.values(PODS||{}).some(p => getMembersOf(p.id).find(m => m.id === d.id)));
 
@@ -5581,6 +5721,53 @@ let FIN_CYCLE = { label: 'Apr 1–15', start: '2026-04-01', end: '2026-04-15' };
 let ALL_DRIVERS = null; // built on first Finance render
 
 function buildFinance() {
+  if (ACTIVE_SERVICE !== 'taxi' && ACTIVE_SERVICE !== 'all') {
+    const el = document.getElementById('fin-body');
+    if (!el) return;
+    var svcVtidMap2 = { 'rideshare': null, 'moto-regular': '1', 'go-car': '2', 'go-suv': '3' };
+    var filterVtid = svcVtidMap2[ACTIVE_SERVICE];
+    var svcDrivers = filterVtid
+      ? DB_RIDESHARE_PERF.filter(function(d){ return d.vtid === filterVtid; })
+      : DB_RIDESHARE_PERF;
+    var svcLabel = (SVC_META[filterVtid || '1'] || {}).label || 'Rideshare';
+    var svcIcon  = (SVC_META[filterVtid || '1'] || {}).icon || '🛵';
+    var totGtv  = svcDrivers.reduce(function(s,d){ return s+d.gtv; }, 0);
+    var totComm = svcDrivers.reduce(function(s,d){ return s+d.commission; }, 0);
+    el.innerHTML = '<div style="padding:var(--s4)">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">'
+      + '<div><div style="font-size:16px;font-weight:700">' + svcIcon + ' ' + svcLabel + ' · Partner Earnings</div>'
+      + '<div style="font-size:11px;color:var(--ink3)">Month-to-date commission · 20% of GTV</div></div>'
+      + '<div style="display:flex;gap:12px">'
+      + '<div style="text-align:right"><div style="font-size:10px;color:var(--ink3)">Total GTV</div><div style="font-size:16px;font-weight:700;font-family:var(--f-mono)">₱' + totGtv.toLocaleString() + '</div></div>'
+      + '<div style="text-align:right"><div style="font-size:10px;color:var(--ink3)">Xpress Commission</div><div style="font-size:16px;font-weight:700;font-family:var(--f-mono);color:var(--green)">₱' + totComm.toLocaleString() + '</div></div>'
+      + '</div></div>'
+      + '<div style="padding:12px 16px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:var(--rl);margin-bottom:20px;display:flex;align-items:center;gap:10px">'
+      + '<span style="font-size:18px">🎁</span>'
+      + '<div><div style="font-size:12px;font-weight:600;color:var(--amber)">Xpress Incentives</div>'
+      + '<div style="font-size:11px;color:var(--ink3)">Trip bonuses and weekly incentives are paid via GCash automatically. Per-driver incentive breakdown coming once incentive API is connected.</div></div>'
+      + '</div>'
+      + '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
+      + '<div style="display:grid;grid-template-columns:1fr 80px 100px 100px 80px 80px;padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px">'
+      + '<span>Driver</span><span style="text-align:right">Days</span><span style="text-align:right">Trips</span><span style="text-align:right">GTV</span><span style="text-align:right">Commission</span><span style="text-align:right">Avg/day</span>'
+      + '</div>'
+      + (svcDrivers.length === 0
+        ? '<div style="padding:40px;text-align:center;color:var(--ink3)">Loading driver earnings…</div>'
+        : svcDrivers.slice(0,50).map(function(d,i) {
+            return '<div style="display:grid;grid-template-columns:1fr 80px 100px 100px 80px 80px;padding:10px 16px;border-bottom:1px solid var(--border);align-items:center;font-size:12px' + (i%2===0?'':';background:var(--surface)') + '">'
+              + '<div><div style="font-weight:600">' + d.name + '</div><div style="font-size:10px;color:var(--ink3)">₱' + d.avg_fare.toLocaleString() + ' avg fare</div></div>'
+              + '<div style="text-align:right;color:var(--ink3)">' + d.days + 'd</div>'
+              + '<div style="text-align:right;font-family:var(--f-mono)">' + d.trips.toLocaleString() + '</div>'
+              + '<div style="text-align:right;font-family:var(--f-mono)">₱' + d.gtv.toLocaleString() + '</div>'
+              + '<div style="text-align:right;font-family:var(--f-mono);color:var(--green);font-weight:600">₱' + d.commission.toLocaleString() + '</div>'
+              + '<div style="text-align:right;font-family:var(--f-mono);color:var(--ink2)">₱' + d.cpd.toLocaleString() + '</div>'
+              + '</div>';
+          }).join('')
+        + (svcDrivers.length > 50 ? '<div style="padding:10px;text-align:center;font-size:11px;color:var(--ink3)">+' + (svcDrivers.length-50) + ' more drivers</div>' : '')
+      )
+      + '</div>'
+      + '</div>';
+    return;
+  }
   ALL_DRIVERS = buildAllDrivers();
   renderFinTab(FIN_TAB);
 }
