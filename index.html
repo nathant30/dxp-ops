@@ -1478,6 +1478,19 @@ function buildCmd() {
   const warnAlerts = allAlerts.filter(a => a.sev === 'amber');
   const gap = Math.max(0, target - rev);
   const avgFare = trips > 0 ? Math.round(rev / trips) : 0;
+  const _nowUtc = new Date();
+  const _phtH = (_nowUtc.getUTCHours() + 8) % 24;
+  const _phtM = _nowUtc.getUTCMinutes();
+  const hoursElapsed = Math.max(1, _phtH + _phtM / 60);
+  const revPerHr = Math.round(rev / hoursElapsed);
+  const monthlyTarget = target * 26;
+  if (window._revHrInterval) clearInterval(window._revHrInterval);
+  window._revHrInterval = setInterval(function() {
+    const el2 = document.getElementById('stat-revhr-val');
+    if (!el2) { clearInterval(window._revHrInterval); return; }
+    const n = new Date(); const h = Math.max(1, (n.getUTCHours()+8)%24 + n.getUTCMinutes()/60);
+    el2.textContent = fP(Math.round(rev / h));
+  }, 60000);
 
   // At-risk drivers (below rev/hr target)
   const atRisk = D4W.filter(d => {
@@ -1581,7 +1594,7 @@ function buildCmd() {
   <!-- Stats Row -->
   <div class="stats-row" style="padding:0 0 16px">
     ${[
-      ['Fleet Rev/Hr', fP(Math.round(rev / 8.5)), 'vs ₱275 ops breakeven', 'var(--green)'],
+      ['Fleet Rev/Hr', `<span id="stat-revhr-val">${fP(revPerHr)}</span>`, 'vs Monthly target ' + fP(monthlyTarget), 'var(--green)'],
       ['Rev/Hr per Car', fP(Math.round(rev / Math.max(ASSETS.length, 1) / 8.5)), 'avg per vehicle today', 'var(--accent)'],
       ['Avg Rev/Asset', fP(Math.round(rev / Math.max(ASSETS.length, 1))), 'per car today', 'var(--amber)'],
       ['Below Threshold', D4W.filter(d => gTier(d) === 'Below Threshold').length, 'drivers earning < ₱1,600/day', 'var(--red)'],
@@ -1593,7 +1606,7 @@ function buildCmd() {
     <!-- COL 1: ACTIVE DRIVERS -->
     <div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:14px;font-weight:700">Active Drivers <span style="font-size:11px;color:var(--ink3);font-weight:400">${activeShifts.length}/${ASSETS.length} (Echo Shift)</span></div>
+        <div style="font-size:14px;font-weight:700">Active Vehicles <span style="font-size:11px;color:var(--ink3);font-weight:400">${activeShifts.length}/${ASSETS.length} active</span></div>
         <button class="btn btn-s btn-xs" onclick="goS('assets')">View all →</button>
       </div>
       <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">
@@ -1678,7 +1691,7 @@ function showDriverPerf(mode) {
   if (mode === 'top') {
     if(topBtn){topBtn.style.background='var(--accent)';topBtn.style.color='#fff';topBtn.style.borderColor='var(--accent)';}
     if(strBtn){strBtn.style.background='';strBtn.style.color='';strBtn.style.borderColor='';}
-    const drivers = D4W.slice(0, 8);
+    const drivers = D4W.slice().sort((a,b) => (b.rpd||0) - (a.rpd||0)).slice(0, 8);
     panel.innerHTML = drivers.map((d, i) => {
       const tier = gTier(d);
       const tcls = 'tier-' + tier.toLowerCase().replace(/ /g, '-');
@@ -1692,7 +1705,7 @@ function showDriverPerf(mode) {
   } else {
     if(strBtn){strBtn.style.background='var(--red)';strBtn.style.color='#fff';strBtn.style.borderColor='var(--red)';}
     if(topBtn){topBtn.style.background='';topBtn.style.color='';topBtn.style.borderColor='';}
-    const struggling = D4W.filter(d => gTier(d) === 'Below Threshold' || gTier(d) === 'Standard').slice(0, 8);
+    const struggling = D4W.slice().sort((a,b) => (a.rpd||0) - (b.rpd||0)).slice(0, 8);
     panel.innerHTML = struggling.length === 0
       ? '<div class="empty" style="padding:16px"><div style="font-size:11px;color:var(--ink3)">No struggling drivers 🎉</div></div>'
       : struggling.map((d, i) => {
