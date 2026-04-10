@@ -921,7 +921,7 @@ function dbCall(type, callback) {
   return fetch(DB_EDGE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'apikey': SUPA_KEY },
-    body: JSON.stringify({ type: type })
+    body: JSON.stringify({ type: type, day_start_hour: OPS_DAY_CONFIG.day_start_hour || 4 })
   })
   .then(function(r) { return r.json(); })
   .then(function(res) {
@@ -1045,6 +1045,12 @@ var DB_TODAY = null;
 var DB_DATA_DATE = null;
 var DB_ASSET_REV = {};
 var ACTIVE_SERVICE = 'taxi'; // default to taxi
+var OPS_DAY_CONFIG = {
+  day_start_hour: 4,
+  am_shift: { start_hour: 4, end_hour: 15, label: 'AM (4AM–3PM)' },
+  pm_shift: { start_hour: 13, end_hour: 26, label: 'PM (1PM–2AM)' },
+  schedule_change_date: '2025-05-01',
+};
 var DB_SERVICES = {}; // keyed by vehicleTypeId, populated by services_overview query
 
 function getServiceData(serviceId) {
@@ -2836,7 +2842,19 @@ function schedRenderCfg(){
   var el=document.getElementById('sched-cfg-body');
   if(!el) return;
   var w=SCHED_CFG.weights;
-  el.innerHTML='<div class="card" style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:10px">SHIFT LIMITS</div>'
+  el.innerHTML='<div class="card" style="margin-bottom:var(--s4);padding:20px 24px">'
+    +'<div style="font-size:13px;font-weight:700;margin-bottom:4px">Operational Day Start</div>'
+    +'<div style="font-size:11px;color:var(--ink3);margin-bottom:16px">Defines when the ops day resets. Currently <strong>'+(OPS_DAY_CONFIG.am_shift&&OPS_DAY_CONFIG.am_shift.label||'4AM–3PM')+'</strong> / <strong>'+(OPS_DAY_CONFIG.pm_shift&&OPS_DAY_CONFIG.pm_shift.label||'1PM–2AM')+'</strong></div>'
+    +'<div style="display:flex;align-items:center;gap:12px">'
+    +'<div><div style="font-size:10px;color:var(--ink3);margin-bottom:4px">Day starts at (PHT hour)</div>'
+    +'<select id="cfg-day-start" onchange="saveOpsConfig()" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--rs);font-size:12px;background:var(--card)">'
+    +[3,4,5,6].map(function(h){return '<option value="'+h+'"'+(OPS_DAY_CONFIG.day_start_hour===h?' selected':'')+'>'+h+':00 AM</option>';}).join('')
+    +'</select></div>'
+    +'<div style="flex:1;padding:10px 14px;background:rgba(99,102,241,.06);border-radius:var(--rs);font-size:10px;color:var(--ink3)">'
+    +'Current: Op day = <strong style="color:var(--accent)">'+(OPS_DAY_CONFIG.day_start_hour||4)+'AM PHT → '+((OPS_DAY_CONFIG.day_start_hour||4)+22)+':00 next day</strong>. '
+    +'Change on <strong>May 1</strong> when new schedule starts.</div>'
+    +'</div></div>'
+    +'<div class="card" style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:10px">SHIFT LIMITS</div>'
     +[['Max shift hours','sched-cfg-maxh','number',SCHED_CFG.maxShiftH],['Min rest hours between shifts','sched-cfg-minh','number',SCHED_CFG.minRestH],['Drivers per asset ratio','sched-cfg-ratio','number',SCHED_CFG.driversPerAsset],['Swap cutoff hours before shift','sched-cfg-swap','number',SCHED_CFG.swapCutoffH]].map(function(f){
       return '<div class="frow"><div class="fl">'+f[0]+'</div><input class="fi" id="'+f[1]+'" type="'+f[2]+'" step="0.1" value="'+f[3]+'"></div>';
     }).join('')+'</div>'
@@ -2849,6 +2867,24 @@ function schedRenderCfg(){
     +'<button class="btn btn-p btn-xs" onclick="schedSaveCfgForm()">Save Config</button>'
     +' <span style="font-size:10px;color:var(--ink3)">Changes apply to new assignments immediately</span>';
   schedCheckWSum();
+}
+
+function saveOpsConfig() {
+  var h = parseInt(document.getElementById('cfg-day-start')?.value || '4');
+  OPS_DAY_CONFIG.day_start_hour = h;
+  fetch(SUPA_URL + '/rest/v1/app_settings', {
+    method: 'POST',
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates'
+    },
+    body: JSON.stringify({ key: 'ops_day_config', value: OPS_DAY_CONFIG })
+  }).then(function() {
+    toast('✓ Ops day config saved — refreshing data');
+    dbRefreshAll();
+  }).catch(function(e) { toast('Failed to save config: ' + e.message); });
 }
 
 function schedCheckWSum(){
@@ -6335,6 +6371,19 @@ document.addEventListener('keydown', function(e) {
     if (navMap[e.key]) { goS(navMap[e.key]); return; }
   }
 });
+
+// ── Ops config loader ─────────────────────────────────────────────────────────
+(async function loadOpsConfig() {
+  try {
+    const r = await fetch(SUPA_URL + '/rest/v1/app_settings?key=eq.ops_day_config&select=value', {
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+    });
+    const rows = await r.json();
+    if (rows && rows[0] && rows[0].value) {
+      Object.assign(OPS_DAY_CONFIG, rows[0].value);
+    }
+  } catch(e) { console.warn('Could not load ops config', e); }
+})();
 
 // ── Passcode gate ─────────────────────────────────────────────────────────────
 function gateCheck() {
