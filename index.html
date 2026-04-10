@@ -1390,9 +1390,15 @@ function dismissAlert(id) { DISMISSED_ALERTS.add(id); updateAlertStrip(); }
 // ─── TOPBAR PILLS ─────────────────────────────────────────────────────────────
 function updateTopbar() {
   const today = TODAY;
-  const rev = ASSETS.reduce((s, a) => s + assetRevToday2(a.asset_id), 0);
-  const trips = ASHIFTS.filter(s => s.date === DATA_DATE).reduce((s, sh) => s + (sh.trips || 0), 0);
-  const active = ASHIFTS.filter(s => s.date === DATA_DATE && s.status === 'active').length;
+  const rev = (window.DB_TODAY && Number(window.DB_TODAY.total_revenue) > 0)
+    ? Number(window.DB_TODAY.total_revenue)
+    : ASSETS.reduce((s, a) => s + assetRevToday2(a.asset_id), 0);
+  const trips = (window.DB_TODAY && Number(window.DB_TODAY.total_trips) > 0)
+    ? Number(window.DB_TODAY.total_trips)
+    : ASHIFTS.filter(s => s.date === DATA_DATE).reduce((s, sh) => s + (sh.trips || 0), 0);
+  const active = (window.DB_TODAY && Number(window.DB_TODAY.active_drivers) > 0)
+    ? Number(window.DB_TODAY.active_drivers)
+    : ASHIFTS.filter(s => s.date === DATA_DATE && s.status === 'active').length;
   const target = ASSETS.reduce((s, a) => s + getAssetTarget(a.asset_id), 0);
   const pct = target > 0 ? Math.round(rev / target * 100) : 0;
   const pill = document.getElementById('pill-rev');
@@ -1453,7 +1459,9 @@ function buildCmd() {
   const el = document.getElementById('cmd-content');
   if (!el) return;
   const today = TODAY;
-  const rev = ASSETS.reduce((s, a) => s + assetRevToday2(a.asset_id), 0);
+  const rev = (window.DB_TODAY && Number(window.DB_TODAY.total_revenue) > 0)
+    ? Number(window.DB_TODAY.total_revenue)
+    : ASSETS.reduce((s, a) => s + assetRevToday2(a.asset_id), 0);
   const target = ASSETS.reduce((s, a) => s + getAssetTarget(a.asset_id), 0);
   const pct = target > 0 ? Math.round(rev / target * 100) : 0;
   const pctCol = pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--amber)' : 'var(--red)';
