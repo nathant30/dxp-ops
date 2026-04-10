@@ -1559,6 +1559,209 @@ function buildCmd() {
     `;
     return;
   }
+
+  if (ACTIVE_SERVICE === 'all') {
+    const _aS = getServiceData('all');
+    const _allXpressRev = Object.keys(DB_SERVICES).reduce((s, vtid) => {
+      const d = DB_SERVICES[vtid];
+      return s + (vtid === '16' ? Number(d.xpress_revenue || 0) : Number(d.commission || 0));
+    }, 0);
+    const _allGTV = Object.keys(DB_SERVICES).reduce((s, vtid) => s + Number(DB_SERVICES[vtid].gtv || 0), 0);
+    const rev = _allXpressRev || (_aS ? _aS.rev : 0);
+    const trips = _aS ? _aS.trips : 0;
+    const avgFare = _allGTV > 0 && trips > 0 ? Math.round(_allGTV / trips) : 0;
+    const target = ASSETS.reduce((s, a) => s + getAssetTarget(a.asset_id), 0);
+    const pct = target > 0 ? Math.round(rev / target * 100) : 0;
+    const pctCol = pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--amber)' : 'var(--red)';
+    const gap = Math.max(0, target - rev);
+    const activeShifts = ASHIFTS.filter(s => s.date === DATA_DATE && s.status === 'active');
+    const svcCompPct   = _aS ? _aS.compPct   : 0;
+    const svcCancelled = _aS ? _aS.cancelled : 0;
+    const svcRequested = _aS ? _aS.requested : 0;
+    const svcDrivers   = _aS ? _aS.drivers   : 0;
+    const allAlerts  = getAlerts();
+    const critAlerts = allAlerts.filter(a => a.sev === 'red');
+    const warnAlerts = allAlerts.filter(a => a.sev === 'amber');
+
+    const _svcRows = [
+      { vtid: '16', label: 'Taxi',          icon: '🚕', isRevenue: true  },
+      { vtid: '1',  label: 'Moto · Regular',icon: '🛵', isRevenue: false },
+      { vtid: '2',  label: 'Go Car',         icon: '🚗', isRevenue: false },
+      { vtid: '3',  label: 'Go SUV',         icon: '🚐', isRevenue: false },
+    ].map(svc => {
+      const d = DB_SERVICES[svc.vtid];
+      return Object.assign({}, svc, {
+        trips:     d ? Number(d.trips          || 0) : 0,
+        revenue:   d ? (svc.isRevenue ? Number(d.xpress_revenue || 0) : Number(d.commission || 0)) : 0,
+        gtv:       d ? Number(d.gtv            || 0) : 0,
+        drivers:   d ? Number(d.active_drivers || 0) : 0,
+        cancelled: d ? Number(d.cancelled      || 0) : 0,
+      });
+    });
+
+    const vehicleMap = {};
+    ASHIFTS.forEach(function(s) {
+      if (!vehicleMap[s.asset_id]) vehicleMap[s.asset_id] = { am: null, pm: null, total: 0 };
+      const hStr = s.started_at ? (s.started_at.split('T')[1] || s.started_at.split(' ')[1] || '0').split(':')[0] : '0';
+      const h = parseInt(hStr); const isPm = !isNaN(h) && h >= 12;
+      if (isPm) vehicleMap[s.asset_id].pm = s; else vehicleMap[s.asset_id].am = s;
+      vehicleMap[s.asset_id].total += s.gross_revenue || 0;
+    });
+
+    const compCol = svcCompPct >= 90 ? '#34D399' : svcCompPct >= 75 ? '#FCD34D' : '#F87171';
+
+    el.innerHTML = `
+    <div class="rev-intel">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(255,255,255,.08);border-radius:var(--rxl);overflow:hidden">
+        <div style="background:rgba(255,255,255,.04);padding:20px 24px">
+          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Xpress Revenue</div>
+          <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:#FCD34D;letter-spacing:-1px;line-height:1">${fP(rev)}</div>
+          <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
+            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Total GTV</span><span style="color:rgba(255,255,255,.8);font-weight:600">${fP(_allGTV)}</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Taxi target</span><span style="color:rgba(255,255,255,.8);font-weight:600">${fP(target)}</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Gap to target</span><span style="color:${gap>0?'#F87171':'#34D399'};font-weight:600">${gap>0?'-'+fP(gap):'✓ Exceeded'}</span></div>
+          </div>
+        </div>
+        <div style="background:rgba(255,255,255,.04);padding:20px 24px">
+          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Completed Trips</div>
+          <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:#fff;letter-spacing:-1px;line-height:1">${trips.toLocaleString()}</div>
+          <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
+            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Avg GTV / trip</span><span style="color:rgba(255,255,255,.8);font-weight:600">${fP(avgFare)}</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Active drivers</span><span style="color:#34D399;font-weight:600">${svcDrivers}</span></div>
+          </div>
+        </div>
+        <div style="background:rgba(255,255,255,.04);padding:20px 24px">
+          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">App Completion Rate</div>
+          <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:${compCol};letter-spacing:-1px;line-height:1">${svcCompPct}%</div>
+          <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
+            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Completed</span><span style="color:#34D399;font-weight:600">${trips.toLocaleString()}</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Cancelled</span><span style="color:${svcCancelled>0?'#F87171':'rgba(255,255,255,.8)'};font-weight:600">${svcCancelled.toLocaleString()}</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Total requested</span><span style="color:rgba(255,255,255,.8);font-weight:600">${svcRequested.toLocaleString()}</span></div>
+          </div>
+        </div>
+        <div style="background:rgba(255,255,255,.04);padding:20px 24px">
+          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Taxi Target</div>
+          <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:${pctCol};letter-spacing:-1px;line-height:1">${pct}%</div>
+          <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
+            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Status</span><span style="color:${pct>=100?'#34D399':pct>=80?'#FCD34D':'#F87171'};font-weight:600">${pct>=100?'✓ Exceeded':pct>=80?'On track':'Behind pace'}</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Revenue gap</span><span style="color:rgba(255,255,255,.8);font-weight:600">${gap>0?'-'+fP(gap):'✓ Done'}</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Taxi fleet</span><span style="color:rgba(255,255,255,.8);font-weight:600">${activeShifts.length} / ${ASSETS.length} active</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:var(--s4);padding:var(--s4) 0">
+
+      <!-- COL 1: Service Breakdown -->
+      <div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px">Service Breakdown</div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">
+          ${_svcRows.map(svc => {
+            const revPct = _allXpressRev > 0 ? Math.round(svc.revenue / _allXpressRev * 100) : 0;
+            return '<div style="padding:10px 14px;border-bottom:1px solid var(--border)">'
+              + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'
+              + '<span style="font-size:14px">' + svc.icon + '</span>'
+              + '<span style="font-size:12px;font-weight:600;flex:1">' + svc.label + '</span>'
+              + '<span style="font-family:var(--f-mono);font-size:11px;font-weight:700;color:var(--green)">' + (svc.revenue > 0 ? fP(svc.revenue) : '—') + '</span>'
+              + '</div>'
+              + '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:5px">'
+              + '<div style="height:100%;width:' + revPct + '%;background:var(--green);border-radius:2px"></div>'
+              + '</div>'
+              + '<div style="display:flex;gap:10px;font-size:9.5px;color:var(--ink3)">'
+              + '<span>' + svc.trips.toLocaleString() + ' trips</span>'
+              + '<span>' + svc.drivers + ' drivers</span>'
+              + (svc.gtv > svc.revenue && svc.gtv > 0 ? '<span>GTV ' + fP(svc.gtv) + '</span>' : '')
+              + '</div></div>';
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- COL 2: Fleet Vehicles (Taxi) -->
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:14px;font-weight:700">Fleet Vehicles <span style="font-size:11px;color:var(--ink3);font-weight:400">${activeShifts.length}/${ASSETS.length} active</span></div>
+          <button class="btn btn-s btn-xs" onclick="goS('assets')">View all →</button>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;max-height:400px;overflow-y:auto">
+          ${ASSETS.slice(0, 20).map(asset => {
+            const vd = vehicleMap[asset.asset_id] || { am: null, pm: null, total: 0 };
+            const tgt = getAssetTarget(asset.asset_id) || 3000;
+            const amRev = vd.am ? (vd.am.gross_revenue || 0) : 0;
+            const pmRev = vd.pm ? (vd.pm.gross_revenue || 0) : 0;
+            const total = vd.total;
+            const amPct = Math.min(100, Math.round(amRev / tgt * 100));
+            const pmPct = Math.min(100 - amPct, Math.round(pmRev / tgt * 100));
+            const totalPct = Math.min(100, Math.round(total / tgt * 100));
+            const isActive = !!ASHIFTS.find(s => s.asset_id === asset.asset_id && s.status === 'active');
+            const statusCol = total === 0 ? 'var(--ink4)' : totalPct >= 80 ? 'var(--green)' : totalPct >= 50 ? 'var(--amber)' : 'var(--red)';
+            return '<div style="padding:7px 12px;border-bottom:1px solid var(--border);' + (total === 0 ? 'opacity:.4' : '') + '">'
+              + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
+              + '<div style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:' + (isActive ? 'var(--green)' : total > 0 ? 'var(--amber)' : 'var(--border)') + '"></div>'
+              + '<div style="font-family:var(--f-mono);font-size:10px;font-weight:700;width:58px">' + asset.plate + '</div>'
+              + '<div style="font-family:var(--f-mono);font-size:10px;font-weight:700;color:' + statusCol + ';margin-left:auto">' + (total > 0 ? fP(total) : '—') + '</div>'
+              + '</div>'
+              + '<div style="position:relative;height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-left:12px">'
+              + (amPct > 0 ? '<div style="position:absolute;left:0;height:100%;width:' + amPct + '%;background:var(--green)"></div>' : '')
+              + (pmPct > 0 ? '<div style="position:absolute;left:' + amPct + '%;height:100%;width:' + pmPct + '%;background:var(--accent)"></div>' : '')
+              + '<div style="position:absolute;left:50%;top:0;height:100%;width:1px;background:rgba(255,255,255,.2)"></div>'
+              + '</div></div>';
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- COL 3: Driver Performance -->
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:14px;font-weight:700">Driver Performance</div>
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-s btn-xs" id="dp-top-btn" onclick="showDriverPerf('top')" style="background:var(--accent);color:#fff;border-color:var(--accent)">Top</button>
+            <button class="btn btn-s btn-xs" id="dp-str-btn" onclick="showDriverPerf('struggling')">Struggling</button>
+          </div>
+        </div>
+        <div id="driver-perf-panel" style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">
+          ${D4W.slice(0, 10).map((d, i) => {
+            const tier = gTier(d);
+            const tcls = 'tier-' + tier.toLowerCase().replace(/ /g, '-').replace(/_/g, '-');
+            return '<div class="shift-item" onclick="openDriverDrawer(\'' + d.id + '\')">'
+              + '<div style="width:20px;font-size:11px;font-weight:700;color:var(--ink3)">' + (i===0?'🥇':i===1?'🥈':i===2?'🥉':'#'+(i+1)) + '</div>'
+              + '<div style="flex:1"><div style="font-size:12px;font-weight:600">' + d.name + '</div><div style="font-size:10px;color:var(--ink3)">₱' + (d.rph||0).toFixed(0) + '/hr · ' + (d.att||0) + '% att</div></div>'
+              + '<span class="badge ' + tcls + '">' + tier + '</span>'
+              + '<div style="font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--green);width:55px;text-align:right">' + fP(d.rpd||0) + '</div>'
+              + '</div>';
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- COL 4: Alerts -->
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:14px;font-weight:700">Alerts</div>
+          <div style="display:flex;gap:4px">
+            ${critAlerts.length ? '<span class="badge badge-red">' + critAlerts.length + ' critical</span>' : ''}
+            ${warnAlerts.length ? '<span class="badge badge-amber">' + warnAlerts.length + ' warning</span>' : ''}
+          </div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">
+          ${allAlerts.length === 0
+            ? '<div class="empty" style="padding:20px"><div class="empty-icon">✅</div><div class="empty-title" style="font-size:12px">All clear</div></div>'
+            : allAlerts.slice(0, 12).map(a => {
+                const sev = a.sev === 'red'   ? { bg: '#FEF2F2',          col: 'var(--red)'  }
+                          : a.sev === 'amber' ? { bg: 'var(--amber-b)',    col: 'var(--amber)'}
+                                              : { bg: 'var(--surface)',    col: 'var(--ink3)' };
+                return '<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);background:' + sev.bg + '">'
+                  + '<div class="dot ' + (a.sev==='red'?'r':a.sev==='amber'?'a':'b') + '" style="margin-top:3px;flex-shrink:0"></div>'
+                  + '<div style="flex:1"><div style="font-size:11px;color:' + sev.col + ';font-weight:600">' + a.msg + '</div><div style="font-size:9.5px;color:var(--ink3);margin-top:2px">' + a.cat + '</div></div>'
+                  + '</div>';
+              }).join('')
+          }
+        </div>
+      </div>
+
+    </div>`;
+    return;
+  }
+
   const today = TODAY;
   const _svc = Object.keys(DB_SERVICES).length > 0 ? getServiceData(ACTIVE_SERVICE) : null;
   const rev = _svc ? _svc.rev
