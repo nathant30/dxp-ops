@@ -983,7 +983,7 @@ function dbRefreshAll() {
     if (data && data.length) {
       ASHIFTS = data.map(function(r) {
         var asset = ASSETS.find(function(a) { return String(a.vehicle_id) === String(r.vehicle_id); });
-        return { rider_id: String(r.rider_id || ''), asset_id: asset ? asset.asset_id : null, date: today, status: r.status || 'completed', trips: Number(r.trips || 0), gross_revenue: Number(r.revenue || 0), revenue: Number(r.revenue || 0), started_at: r.started_at || null, ended_at: r.ended_at || null };
+        return { rider_id: String(r.rider_id || ''), asset_id: asset ? asset.asset_id : null, date: today, status: r.status || 'completed', trips: Number(r.trips || 0), gross_revenue: Number(r.revenue || 0), revenue: Number(r.revenue || 0), handover_out: r.status === 'completed', started_at: r.started_at || null, ended_at: r.ended_at || null };
       });
       DATA_DATE = today;
       if (typeof updateTopbar === 'function') updateTopbar();
@@ -1037,7 +1037,7 @@ const DA=8;
 const TODAY_PH = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 const TODAY = TODAY_PH;
 // DATA_DATE = latest date in loaded shift data — stays correct when run on a different calendar day
-const DATA_DATE = (function() {
+let DATA_DATE = (function() {
   if (!REAL_TODAY_SHIFTS || !REAL_TODAY_SHIFTS.length) return TODAY_PH;
   return REAL_TODAY_SHIFTS.map(function(s){return s.date||'';}).filter(Boolean).sort().pop();
 })();
