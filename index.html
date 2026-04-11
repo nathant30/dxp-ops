@@ -966,7 +966,7 @@ function dbRefreshAll() {
   }, 20000);
 
   dbCall('today_overview', function(data, today) {
-    if (data) { DB_TODAY = data; DB_DATA_DATE = today;
+    if (data) { DB_TODAY = data; DB_DATA_DATE = today; if (data.snapshot_time) DB_SNAPSHOT_TIME = data.snapshot_time;
       if (DB_TODAY.total_revenue) {
         var rv = document.getElementById('pill-rev-val');
         if (rv) rv.textContent = '₱' + Number(DB_TODAY.total_revenue).toLocaleString();
@@ -984,16 +984,17 @@ function dbRefreshAll() {
       ASHIFTS = data.map(function(r) {
         var asset = ASSETS.find(function(a) { return String(a.vehicle_id) === String(r.vehicle_id); });
         return {
-          asset_id: asset ? asset.asset_id : String(r.vehicle_id || ''),
-          rider_id: String(r.rider_id || ''),
-          driver_name: String(r.driver_name || 'Driver'),
-          date: today,
-          status: r.status || 'completed',
-          trips: Number(r.trips || 0),
+          asset_id:      asset ? asset.asset_id : String(r.vehicle_id || ''),
+          rider_id:      String(r.rider_id || ''),
+          driver_name:   String(r.driver_name || 'Driver'),
+          shift_code:    String(r.shift_code || ''),
+          started_at:    r.started_at_pht || null,
+          ended_at:      r.ended_at_pht || null,
+          date:          today,
+          status:        r.status || 'completed',
+          trips:         Number(r.trips || 0),
           gross_revenue: Number(r.revenue || 0),
-          shift_hours: Number(r.shift_hours || 0),
-          started_at: r.started_at || null,
-          ended_at: r.ended_at || null,
+          shift_hours:   Number(r.shift_hours || 0),
         };
       });
       DATA_DATE = today;
@@ -1072,6 +1073,21 @@ var OPS_DAY_CONFIG = {
 };
 var DB_SERVICES = {}; // keyed by vehicleTypeId, populated by services_overview query
 var DB_RIDESHARE_PERF = []; // rideshare driver MTD performance
+
+var SHIFT_SCHEDULE = [
+  { code: 'AM1', label: 'Morning 1',   start_hour: 4,  color: '#34D399', drivers_target: 17 },
+  { code: 'AM2', label: 'Morning 2',   start_hour: 5,  color: '#60A5FA', drivers_target: 7  },
+  { code: 'PM1', label: 'Afternoon 1', start_hour: 14, color: '#FBBF24', drivers_target: 16 },
+  { code: 'PM2', label: 'Afternoon 2', start_hour: 15, color: '#A78BFA', drivers_target: 28 },
+  { code: 'PM3', label: 'Afternoon 3', start_hour: 16, color: '#F87171', drivers_target: 8  },
+];
+
+function getShift(shiftCode) {
+  return SHIFT_SCHEDULE.find(function(s){ return s.code === shiftCode; })
+    || { code: shiftCode, label: shiftCode, color: 'var(--ink3)', drivers_target: 0 };
+}
+
+var DB_SNAPSHOT_TIME = ''; // "HH:MM PHT" updated on each refresh
 
 // Registered partner counts from Databricks (as of April 2026)
 var REGISTERED_PARTNERS = { '16': 194, '1': 189, '2': 111, '3': 67, '10': 46 };
@@ -1876,7 +1892,7 @@ function buildCmd() {
 
       <!-- XPRESS EARNINGS -->
         <div style="background:rgba(255,255,255,.04);padding:20px 24px">
-          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">${isCommission ? 'Xpress Commission' : 'Xpress Earnings'}</div>
+          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">${isCommission ? 'Xpress Commission' : 'Xpress Earnings'}${DB_SNAPSHOT_TIME ? '<span style="font-size:9px;color:rgba(255,255,255,.35);margin-left:8px;font-weight:400;text-transform:none;letter-spacing:0">as of '+DB_SNAPSHOT_TIME+'</span>' : ''}</div>
           <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:#FCD34D;letter-spacing:-1px;line-height:1">${fP(rev)}</div>
           <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
             <div style="display:flex;justify-content:space-between;font-size:10px">
@@ -1984,50 +2000,59 @@ function buildCmd() {
         var vehicleMap = {};
         ASHIFTS.forEach(function(s) {
           var key = s.asset_id;
-          if (!vehicleMap[key]) vehicleMap[key] = { am: null, pm: null, total: 0 };
-          var startHour = s.started_at ? parseInt(s.started_at.split('T')[1] || s.started_at.split(' ')[1] || '0') : 0;
-          if (isNaN(startHour)) startHour = 0;
-          var isPm = startHour >= 12;
-          if (isPm) vehicleMap[key].pm = s;
-          else vehicleMap[key].am = s;
+          if (!vehicleMap[key]) vehicleMap[key] = { shifts: [], total: 0 };
+          if (!vehicleMap[key].shifts) vehicleMap[key].shifts = [];
+          vehicleMap[key].shifts.push(s);
           vehicleMap[key].total += s.gross_revenue || 0;
         });
 
         return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;max-height:480px;overflow-y:auto">'
           + ASSETS.map(function(asset) {
-            var vd = vehicleMap[asset.asset_id] || { am: null, pm: null, total: 0 };
+            var vd = vehicleMap[asset.asset_id] || { shifts: [], total: 0 };
+            var shifts = vd.shifts || [];
             var tgt = getAssetTarget(asset.asset_id) || 3000;
-            var amRev = vd.am ? (vd.am.gross_revenue || 0) : 0;
-            var pmRev = vd.pm ? (vd.pm.gross_revenue || 0) : 0;
-            var total = vd.total;
-            var amPct = Math.min(100, Math.round(amRev / tgt * 100));
-            var pmPct = Math.min(100 - amPct, Math.round(pmRev / tgt * 100));
-            var totalPct = Math.min(100, Math.round(total / tgt * 100));
-            var isActive = !!ASHIFTS.find(function(s) { return s.asset_id === asset.asset_id && s.status === 'active'; });
-            var amDriver = vd.am ? (vd.am.driver_name || '—') : null;
-            var pmDriver = vd.pm ? (vd.pm.driver_name || '—') : null;
-            var statusCol = total === 0 ? 'var(--ink4)' : totalPct >= 80 ? 'var(--green)' : totalPct >= 50 ? 'var(--amber)' : 'var(--red)';
+            var total = shifts.reduce(function(s,sh){ return s+(sh.gross_revenue||0); }, 0);
+            var totalPct = Math.min(100, Math.round(total/tgt*100));
+            var isActive = shifts.some(function(sh){ return sh.status==='active'; });
+            var statusCol = total===0?'var(--ink4)':totalPct>=80?'var(--green)':totalPct>=50?'var(--amber)':'var(--red)';
+            var driverNames = shifts.map(function(sh){ return sh.driver_name?sh.driver_name.split(' ')[0]:''; }).filter(Boolean).join(' · ');
+
+            var barHtml = '<div style="position:relative;height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-left:15px">';
+            var cumPct = 0;
+            shifts.forEach(function(sh) {
+              var shPct = Math.min(100-cumPct, Math.round((sh.gross_revenue||0)/tgt*100));
+              if (shPct > 0) {
+                var shiftDef = getShift(sh.shift_code);
+                barHtml += '<div style="position:absolute;left:'+cumPct+'%;height:100%;width:'+shPct+'%;background:'+shiftDef.color+';border-radius:3px" title="'+shiftDef.label+': '+fP(sh.gross_revenue||0)+'"></div>';
+                cumPct += shPct;
+              }
+            });
+            barHtml += '</div>';
+
+            var shiftLabelsHtml = shifts.length > 0
+              ? '<div style="display:flex;gap:8px;margin-left:15px;margin-top:3px">'
+                + shifts.map(function(sh) {
+                    var def = getShift(sh.shift_code);
+                    return '<div style="font-size:9px;color:'+def.color+'">'
+                      + '<span style="font-weight:700">'+def.code+'</span> '
+                      + fP(sh.gross_revenue||0)
+                      + (sh.driver_name ? ' · '+sh.driver_name.split(' ')[0] : '')
+                      + '</div>';
+                  }).join('')
+                + '</div>'
+              : '';
 
             return '<div style="padding:8px 12px;border-bottom:1px solid var(--border);'
               + (total === 0 ? 'opacity:.45;' : '') + '">'
               + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">'
               + '<div style="width:7px;height:7px;border-radius:50%;background:' + (isActive ? 'var(--green)' : total > 0 ? 'var(--amber)' : 'var(--border)') + ';flex-shrink:0' + (isActive ? ';box-shadow:0 0 5px var(--green)' : '') + '"></div>'
               + '<div style="font-family:var(--f-mono);font-size:11px;font-weight:700;width:68px">' + asset.plate + '</div>'
-              + '<div style="flex:1;font-size:10px;color:var(--ink3);overflow:hidden;white-space:nowrap;text-overflow:ellipsis">'
-              + (amDriver && pmDriver ? amDriver + ' · ' + pmDriver : amDriver || pmDriver || 'No shift today')
-              + '</div>'
+              + '<div style="flex:1;font-size:10px;color:var(--ink3);overflow:hidden;white-space:nowrap;text-overflow:ellipsis">' + (driverNames || 'No shift today') + '</div>'
               + '<div style="font-family:var(--f-mono);font-size:11px;font-weight:700;color:' + statusCol + '">' + (total > 0 ? fP(total) : '—') + '</div>'
               + '<div style="font-size:10px;color:var(--ink3);width:28px;text-align:right">' + (total > 0 ? totalPct + '%' : '') + '</div>'
               + '</div>'
-              + '<div style="position:relative;height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-left:15px">'
-              + (amPct > 0 ? '<div style="position:absolute;left:0;height:100%;width:' + amPct + '%;background:var(--green);border-radius:3px 0 0 3px" title="AM: ' + fP(amRev) + '"></div>' : '')
-              + (pmPct > 0 ? '<div style="position:absolute;left:' + amPct + '%;height:100%;width:' + pmPct + '%;background:var(--accent)" title="PM: ' + fP(pmRev) + '"></div>' : '')
-              + '<div style="position:absolute;left:50%;top:0;height:100%;width:1px;background:rgba(255,255,255,.2)" title="Midday"></div>'
-              + '</div>'
-              + (total > 0 ? '<div style="display:flex;gap:10px;margin-left:15px;margin-top:3px">'
-                + (amRev > 0 ? '<div style="font-size:9px;color:var(--green)">AM ' + fP(amRev) + (amDriver ? ' · ' + amDriver.split(' ')[0] : '') + '</div>' : '')
-                + (pmRev > 0 ? '<div style="font-size:9px;color:var(--accent)">PM ' + fP(pmRev) + (pmDriver ? ' · ' + pmDriver.split(' ')[0] : '') + '</div>' : '')
-                + '</div>' : '')
+              + barHtml
+              + (total > 0 ? shiftLabelsHtml : '')
               + '</div>';
           }).join('')
           + '</div>';
