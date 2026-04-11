@@ -1916,6 +1916,51 @@ function buildCmd() {
         +'</div></div>'
         +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'+ai+'</div></div>';
 
+      // Hourly demand chart — always rendered, filtered by selected service
+      var chartBlock = (function(){
+        var svcVtidFilter = { taxi:'16','moto-regular':'1','go-car':'2','go-suv':'3','etrike':'10' };
+        var selectedVtid = sel ? svcVtidFilter[sel] : null;
+        var hourMap = {};
+        for (var h = 0; h < 24; h++) hourMap[h] = { completed: 0, cancelled: 0, total: 0 };
+        DB_DEMAND_HOURS.forEach(function(r) {
+          if (hourMap[r.hour] === undefined) return;
+          if (selectedVtid && r.vtid !== selectedVtid) return;
+          hourMap[r.hour].completed += r.completed;
+          hourMap[r.hour].cancelled += r.cancelled;
+          hourMap[r.hour].total     += r.total;
+        });
+        var maxVal = 1;
+        for (var hh = 0; hh < 24; hh++) { if (hourMap[hh].total > maxVal) maxVal = hourMap[hh].total; }
+        var phtH = (new Date(Date.now() + 8*3600000)).getUTCHours();
+        var chartTitle = sel ? ('Hourly Demand · '+({'taxi':'Taxi','moto-regular':'Moto Regular','go-car':'Go Car','go-suv':'Go SUV','etrike':'e-Trike'}[sel]||sel)) : 'Hourly Demand · all services';
+        var bars = '';
+        for (var h2 = 0; h2 < 24; h2++) {
+          var hd = hourMap[h2];
+          var compH = Math.round(hd.completed / maxVal * 100);
+          var cancH = Math.round(hd.cancelled / maxVal * 100);
+          var isCur = h2 === phtH, isFut = h2 > phtH;
+          var tip = h2+':00 PHT \u2014 Completed: '+hd.completed+' \u00b7 Cancelled: '+hd.cancelled+' \u00b7 Total: '+hd.total;
+          bars += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;position:relative;cursor:default" title="'+tip+'">'
+            + '<div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:60px;gap:1px;opacity:'+(isFut?'0.25':'1')+'">'
+            + (compH>0?'<div style="width:100%;height:'+compH+'%;background:'+(isCur?'var(--accent)':'var(--green)')+';border-radius:2px 2px 0 0;min-height:2px"></div>':'')
+            + (cancH>0?'<div style="width:100%;height:'+cancH+'%;background:var(--red);opacity:.7;min-height:2px"></div>':'')
+            + '</div>'
+            + '<div style="font-size:8px;color:'+(isCur?'var(--accent)':'var(--ink4)')+';font-weight:'+(isCur?'700':'400')+'">'+(h2%3===0?h2+'h':'')+'</div>'
+            + '</div>';
+        }
+        var inner = DB_DEMAND_HOURS.length === 0
+          ? '<div style="height:80px;display:flex;align-items:center;justify-content:center;color:var(--ink4);font-size:11px">No demand data yet</div>'
+          : '<div style="display:flex;gap:2px;align-items:flex-end">'+bars+'</div>';
+        return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 20px;margin:0 var(--s4) 8px">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
+          +'<div style="font-size:13px;font-weight:700">'+chartTitle+' <span style="font-size:10px;color:var(--ink3);font-weight:400">today</span></div>'
+          +'<div style="display:flex;gap:12px;font-size:10px;color:var(--ink3)">'
+          +'<span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block"></span>Completed</span>'
+          +'<span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block"></span>Cancelled</span>'
+          +'</div></div>'
+          +inner+'</div>';
+      })();
+
       if (!sel || sel === 'taxi') {
         // Fleet + D4W segmented drivers + alerts
         var col1 = (function(){
@@ -1984,51 +2029,11 @@ function buildCmd() {
           +'</div></div>'
           +'<div id="driver-perf-panel" style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'+dpInner+'</div></div>';
 
-        var demandChart = (function(){
-          var hourMap = {};
-          for (var h = 0; h < 24; h++) hourMap[h] = { completed: 0, cancelled: 0, total: 0 };
-          DB_DEMAND_HOURS.forEach(function(r) {
-            if (hourMap[r.hour] !== undefined) {
-              hourMap[r.hour].completed += r.completed;
-              hourMap[r.hour].cancelled += r.cancelled;
-              hourMap[r.hour].total     += r.total;
-            }
-          });
-          var maxVal = 1;
-          for (var hh = 0; hh < 24; hh++) { if (hourMap[hh].total > maxVal) maxVal = hourMap[hh].total; }
-          var phtH = (new Date(Date.now() + 8*3600000)).getUTCHours();
-          var bars = '';
-          for (var h2 = 0; h2 < 24; h2++) {
-            var hd = hourMap[h2];
-            var compH = Math.round(hd.completed / maxVal * 100);
-            var cancH = Math.round(hd.cancelled / maxVal * 100);
-            var isCur = h2 === phtH, isFut = h2 > phtH;
-            bars += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0">'
-              + '<div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:60px;gap:1px;opacity:'+(isFut?'0.25':'1')+'">'
-              + (compH>0?'<div style="width:100%;height:'+compH+'%;background:'+(isCur?'var(--accent)':'var(--green)')+';border-radius:2px 2px 0 0;min-height:2px"></div>':'')
-              + (cancH>0?'<div style="width:100%;height:'+cancH+'%;background:var(--red);opacity:.7;min-height:2px"></div>':'')
-              + '</div>'
-              + '<div style="font-size:8px;color:'+(isCur?'var(--accent)':'var(--ink4)')+';font-weight:'+(isCur?'700':'400')+'">'+(h2%3===0?h2+'h':'')+'</div>'
-              + '</div>';
-          }
-          if (DB_DEMAND_HOURS.length === 0) {
-            return '<div style="height:80px;display:flex;align-items:center;justify-content:center;color:var(--ink4);font-size:11px">No demand data yet</div>';
-          }
-          return '<div style="display:flex;gap:2px;align-items:flex-end">'+bars+'</div>';
-        })();
-        var chartBlock = '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 20px;margin:0 var(--s4) 8px">'
-          +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
-          +'<div style="font-size:13px;font-weight:700">Hourly Demand <span style="font-size:10px;color:var(--ink3);font-weight:400">all services · today</span></div>'
-          +'<div style="display:flex;gap:12px;font-size:10px;color:var(--ink3)">'
-          +'<span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block"></span>Completed</span>'
-          +'<span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block"></span>Cancelled</span>'
-          +'</div></div>'
-          +demandChart+'</div>';
         if (!sel) {
           return chartBlock + '<div style="display:grid;grid-template-columns:1.8fr 1.4fr 0.8fr;gap:8px;padding:var(--s4)">'+col1+col2+col3+'</div>';
         } else {
           var backBtn = '<div style="padding:var(--s4) var(--s4) 0"><button onclick="window.ALL_SELECTED_SVC=null;buildCmd();" class="btn btn-s">← All services</button></div>';
-          return backBtn + '<div style="display:grid;grid-template-columns:1.8fr 1.4fr 0.8fr;gap:8px;padding:var(--s4)">'+col1+col2+col3+'</div>';
+          return chartBlock + backBtn + '<div style="display:grid;grid-template-columns:1.8fr 1.4fr 0.8fr;gap:8px;padding:var(--s4)">'+col1+col2+col3+'</div>';
         }
 
       } else {
@@ -2091,7 +2096,7 @@ function buildCmd() {
           +'<div id="driver-perf-panel" style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'+dpInner+'</div></div>';
 
         var backBtn = '<div style="padding:var(--s4) var(--s4) 0"><button onclick="window.ALL_SELECTED_SVC=null;buildCmd();" class="btn btn-s">← All services</button></div>';
-        return backBtn + '<div style="display:grid;grid-template-columns:1fr 1.4fr 0.8fr;gap:8px;padding:var(--s4)">'+col1+col2+col3+'</div>';
+        return chartBlock + backBtn + '<div style="display:grid;grid-template-columns:1fr 1.4fr 0.8fr;gap:8px;padding:var(--s4)">'+col1+col2+col3+'</div>';
       }
     })()}
     `;
