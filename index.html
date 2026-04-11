@@ -1876,7 +1876,6 @@ function buildCmd() {
             + '</div>';
         }).join('')}
       </div>
-      ${window.ALL_SELECTED_SVC ? '<div style="margin-bottom:8px"><button onclick="window.ALL_SELECTED_SVC=null;buildCmd();" class="btn btn-s">← All services</button></div>' : ''}
     </div>
     ${(function(){
       var sel = window.ALL_SELECTED_SVC;
@@ -2025,7 +2024,12 @@ function buildCmd() {
           +'<span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block"></span>Cancelled</span>'
           +'</div></div>'
           +demandChart+'</div>';
-        return chartBlock + '<div style="display:grid;grid-template-columns:1.8fr 1.4fr 0.8fr;gap:8px;padding:var(--s4)">'+col1+col2+col3+'</div>';
+        if (!sel) {
+          return chartBlock + '<div style="display:grid;grid-template-columns:1.8fr 1.4fr 0.8fr;gap:8px;padding:var(--s4)">'+col1+col2+col3+'</div>';
+        } else {
+          var backBtn = '<div style="padding:var(--s4) var(--s4) 0"><button onclick="window.ALL_SELECTED_SVC=null;buildCmd();" class="btn btn-s">← All services</button></div>';
+          return backBtn + '<div style="display:grid;grid-template-columns:1.8fr 1.4fr 0.8fr;gap:8px;padding:var(--s4)">'+col1+col2+col3+'</div>';
+        }
 
       } else {
         // Marketplace: partner activity + marketplace drivers + alerts
@@ -2086,7 +2090,8 @@ function buildCmd() {
           +'</div></div>'
           +'<div id="driver-perf-panel" style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'+dpInner+'</div></div>';
 
-        return '<div style="display:grid;grid-template-columns:1fr 1.4fr 0.8fr;gap:8px;padding:var(--s4)">'+col1+col2+col3+'</div>';
+        var backBtn = '<div style="padding:var(--s4) var(--s4) 0"><button onclick="window.ALL_SELECTED_SVC=null;buildCmd();" class="btn btn-s">← All services</button></div>';
+        return backBtn + '<div style="display:grid;grid-template-columns:1fr 1.4fr 0.8fr;gap:8px;padding:var(--s4)">'+col1+col2+col3+'</div>';
       }
     })()}
     `;
