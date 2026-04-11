@@ -1115,6 +1115,32 @@ function dbRefreshAll() {
       _done(!!(data && data.length));
     });
   }
+  if (CUR_S === 'assets') {
+    _pending++;
+    dbCall('asset_mtd', function(data) {
+      if (data && data.length) {
+        DB_ASSET_MTD = {};
+        data.forEach(function(r) {
+          var vid = String(r.vehicle_id || '');
+          if (!vid) return;
+          DB_ASSET_MTD[vid] = {
+            trips_mtd:        Number(r.trips_mtd || 0),
+            rev_mtd:          Number(r.rev_mtd || 0),
+            days_active_mtd:  Number(r.days_active_mtd || 0),
+            avg_fare_mtd:     Number(r.avg_fare_mtd || 0),
+            am_trips_today:   Number(r.am_trips_today || 0),
+            am_rev_today:     Number(r.am_rev_today || 0),
+            pm_trips_today:   Number(r.pm_trips_today || 0),
+            pm_rev_today:     Number(r.pm_rev_today || 0),
+            rev_today:        Number(r.rev_today || 0),
+            utilized_hrs:     Number(r.utilized_hrs_today || 0),
+            utilized_hrs_mtd: Number(r.utilized_hrs_mtd || 0),
+          };
+        });
+      }
+      _done(!!(data && data.length));
+    });
+  }
 }
 
 // Global storage for live data
@@ -1134,6 +1160,9 @@ var DB_IN_TRIP_NOW = {};  // StatusId 4,11,5 — driver in motion, keyed by vtid
 var DB_RIDESHARE_PERF = []; // rideshare driver MTD performance
 var DB_DEMAND_HOURS = []; // array of { hour, vtid, completed, cancelled, total }
 var DB_FLEET_HEALTH = []; // fleet_supply_health result — all drivers with lifecycle + today perf
+var DB_ASSET_MTD = {};   // keyed by vehicle_id string
+var ASSET_ECON = { daily_target: 3000, monthly_target: 90000, am_shift_target: 1500, pm_shift_target: 1500, fixed_cost_per_day: 900, buffer_pct: 0.10 };
+var ASSETS_SUB_PAGE = 'overview'; // 'overview' | 'registry' | 'maintenance'
 
 var SHIFT_SCHEDULE = [
   { code: 'AM1', label: 'Morning 1',   start_hour: 4,  color: '#34D399', drivers_target: 17 },
@@ -2919,53 +2948,240 @@ let ASSET_FILTER_KEY = 'all';
 let ASSET_SEARCH = '';
 
 function buildAssets() {
-  if (ACTIVE_SERVICE !== 'taxi' && ACTIVE_SERVICE !== 'all') {
-    const el = document.getElementById('asset-grid');
-    if (!el) return;
-    var svcVtidMap = { 'rideshare': ['1','2','3'], 'moto-regular': ['1'], 'go-car': ['2'], 'go-suv': ['3'] };
-    var vtids = svcVtidMap[ACTIVE_SERVICE] || ['1'];
-    var svcData = vtids.map(function(id) {
-      var s = DB_SERVICES[id] || {};
-      var m = SVC_META[id] || {};
-      var registered = REGISTERED_PARTNERS[id] || 0;
-      var active = Number(s.active_drivers || 0);
-      return { id: id, label: m.label, icon: m.icon, registered: registered, active: active, trips: Number(s.trips||0), gtv: Number(s.gtv||0), commission: Number(s.commission||0), avg_fare: Number(s.avg_fare||0) };
-    });
-    el.innerHTML = '<div style="padding:var(--s4)">'
-      + '<div style="font-size:16px;font-weight:700;margin-bottom:4px">Registered Partners</div>'
-      + '<div style="font-size:11px;color:var(--ink3);margin-bottom:20px">Driver-owned vehicles · Calendar day data</div>'
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--s4);margin-bottom:24px">'
-      + svcData.map(function(s) {
-          var activePct = s.registered > 0 ? Math.round(s.active/s.registered*100) : 0;
-          return '<div class="card" style="padding:20px 24px">'
-            + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'
-            + '<span style="font-size:28px">' + s.icon + '</span>'
-            + '<div><div style="font-size:15px;font-weight:700">' + s.label + '</div>'
-            + '<div style="font-size:11px;color:var(--ink3)">Driver-owned vehicles</div></div>'
-            + '</div>'
-            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">'
-            + '<div style="text-align:center;padding:12px;background:var(--surface);border-radius:var(--rs)"><div style="font-size:22px;font-weight:800;font-family:var(--f-mono)">' + s.registered + '</div><div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px">Registered</div></div>'
-            + '<div style="text-align:center;padding:12px;background:var(--surface);border-radius:var(--rs)"><div style="font-size:22px;font-weight:800;font-family:var(--f-mono);color:var(--green)">' + s.active + '</div><div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px">Active Today</div></div>'
-            + '</div>'
-            + '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:8px"><div style="height:100%;width:' + activePct + '%;background:var(--green);border-radius:2px"></div></div>'
-            + '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink3);margin-bottom:12px"><span>' + activePct + '% active today</span><span>' + (s.registered-s.active) + ' offline</span></div>'
-            + '<div style="border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:6px">'
-            + '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:var(--ink3)">Trips today</span><span style="font-weight:600">' + s.trips.toLocaleString() + '</span></div>'
-            + '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:var(--ink3)">GTV today</span><span style="font-weight:600;font-family:var(--f-mono)">₱' + s.gtv.toLocaleString() + '</span></div>'
-            + '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:var(--ink3)">Xpress commission</span><span style="font-weight:600;color:var(--green);font-family:var(--f-mono)">₱' + s.commission.toLocaleString() + '</span></div>'
-            + '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:var(--ink3)">Avg fare</span><span style="font-weight:600;font-family:var(--f-mono)">₱' + s.avg_fare.toLocaleString() + '</span></div>'
-            + '</div>'
-            + '</div>';
-        }).join('')
-      + '</div>'
-      + '<div style="padding:14px 16px;background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.15);border-radius:var(--rl);font-size:11px;color:var(--ink3)">'
-      + '💡 Registered partner counts reflect drivers who completed at least one trip in the last 30 days. Real-time registration data will sync when Xpress partner DB is connected.'
-      + '</div>'
-      + '</div>';
-    return;
+  var el = document.getElementById('assets-content');
+  if (!el) return;
+
+  var TOTAL = ASSETS.length || 56;
+  var tgt   = ASSET_ECON.daily_target;
+  var amTgt = ASSET_ECON.am_shift_target;
+  var pmTgt = ASSET_ECON.pm_shift_target;
+  var mTgt  = ASSET_ECON.monthly_target;
+  var fixedCost = ASSET_ECON.fixed_cost_per_day;
+  var bufferCount = Math.round(TOTAL * ASSET_ECON.buffer_pct);
+
+  function getAssetData(asset) {
+    var vid = String(asset.vehicle_id || '');
+    return DB_ASSET_MTD[vid] || { trips_mtd:0, rev_mtd:0, days_active_mtd:0, avg_fare_mtd:0, am_trips_today:0, am_rev_today:0, pm_trips_today:0, pm_rev_today:0, rev_today:0, utilized_hrs:0, utilized_hrs_mtd:0 };
   }
-  renderAssetGrid2();
+
+  var above=[], onTrack=[], underperform=[], idle=[];
+  ASSETS.forEach(function(asset) {
+    var d = getAssetData(asset);
+    var rev = d.rev_today;
+    if (rev >= tgt)          above.push(asset);
+    else if (rev >= tgt*0.6) onTrack.push(asset);
+    else if (rev > 0)        underperform.push(asset);
+    else                     idle.push(asset);
+  });
+
+  var activeCount = ASSETS.filter(function(a){ return getAssetData(a).rev_today > 0; }).length;
+  var unplanned = Math.max(0, (TOTAL - activeCount) - bufferCount);
+  var lostRev = unplanned * tgt;
+
+  var phtNow = new Date(Date.now() + 8*3600000);
+  var dayOfMonth = phtNow.getUTCDate();
+  var daysInMonth = new Date(phtNow.getUTCFullYear(), phtNow.getUTCMonth()+1, 0).getUTCDate();
+  var expectedByNow = Math.round(mTgt / daysInMonth * dayOfMonth);
+  var fleetAvgMtd = ASSETS.length > 0 ? Math.round(ASSETS.reduce(function(s,a){ return s+getAssetData(a).rev_mtd; },0)/ASSETS.length) : 0;
+  var mtdPacingPct = expectedByNow > 0 ? Math.round(fleetAvgMtd/expectedByNow*100) : 0;
+
+  var dualShift=0, singleShift=0, noShift=0;
+  ASSETS.forEach(function(a){
+    var d=getAssetData(a);
+    var hasAm=d.am_rev_today>0, hasPm=d.pm_rev_today>0;
+    if(hasAm&&hasPm) dualShift++;
+    else if(hasAm||hasPm) singleShift++;
+    else noShift++;
+  });
+
+  function fP(n){ return '\u20b1'+Math.round(n).toLocaleString(); }
+  function pctBar(pct, col) {
+    var w=Math.min(100,Math.round(pct));
+    return '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:4px"><div style="height:100%;width:'+w+'%;background:'+col+';border-radius:2px"></div></div>';
+  }
+  function shiftCell(rev, trips, label, tgtAmt) {
+    var pct = Math.round(rev/tgtAmt*100);
+    var col = rev>=tgtAmt?'var(--green)':rev>0?'var(--amber)':'var(--ink4)';
+    if (rev===0) return '<div style="font-size:11px;color:var(--ink4)">\u2014 '+label+' pending</div>';
+    return '<div>'
+      +'<div style="font-size:12px;font-weight:600;color:'+col+'">'+fP(rev)+'</div>'
+      +'<div style="font-size:10px;color:var(--ink3)">'+label+' \u00b7 '+trips+' trips \u00b7 '+pct+'% tgt</div>'
+      +'</div>';
+  }
+  function assetRow(asset, rowIdx) {
+    var d = getAssetData(asset);
+    var rev = d.rev_today;
+    var pct = Math.min(100,Math.round(rev/tgt*100));
+    var barCol = rev>=tgt?'var(--green)':rev>=tgt*0.6?'var(--accent)':rev>0?'var(--amber)':'var(--red)';
+    var mtdPct = mTgt>0?Math.round(d.rev_mtd/mTgt*100):0;
+    var utilHrLabel = d.utilized_hrs>0?fP(Math.round(rev/d.utilized_hrs))+'/hr':'\u2014';
+    return '<div style="display:grid;grid-template-columns:90px 1fr 1fr 1fr 110px 100px;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;'+(rowIdx%2===1?'background:var(--surface)':'')+'">'
+      +'<div><div style="font-family:var(--f-mono);font-size:12px;font-weight:700">'+asset.plate+'</div>'
+      +'<div style="font-size:10px;color:var(--ink3)">'+utilHrLabel+'</div></div>'
+      +shiftCell(d.am_rev_today, d.am_trips_today, 'AM', amTgt)
+      +shiftCell(d.pm_rev_today, d.pm_trips_today, 'PM', pmTgt)
+      +'<div>'
+      +'<div style="font-size:16px;font-weight:700;font-family:var(--f-mono);color:'+barCol+'">'+fP(rev)+'</div>'
+      +pctBar(pct, barCol)
+      +'<div style="font-size:10px;color:var(--ink3);margin-top:2px">'+pct+'% of \u20b1'+tgt.toLocaleString()+' target</div>'
+      +'</div>'
+      +'<div>'
+      +'<div style="font-size:12px;font-weight:600;font-family:var(--f-mono)">'+fP(d.rev_mtd)+'</div>'
+      +pctBar(mtdPct, mtdPct>=100?'var(--green)':mtdPct>=60?'var(--accent)':'var(--amber)')
+      +'<div style="font-size:10px;color:var(--ink3);margin-top:2px">'+d.days_active_mtd+'d active \u00b7 '+mtdPct+'% MTD</div>'
+      +'</div>'
+      +'<div style="text-align:right">'
+      +'<div style="font-size:12px;font-weight:600;font-family:var(--f-mono);color:'+(rev-fixedCost>0?'var(--green)':'var(--red)')+'">'+fP(Math.max(0,rev-fixedCost))+'</div>'
+      +'<div style="font-size:10px;color:var(--ink3)">after est. costs</div>'
+      +'</div>'
+      +'</div>';
+  }
+
+  function assetGroup(assets, label, col, bg, defaultOpen) {
+    if(assets.length===0) return '';
+    var rows = assets.map(function(a,i){ return assetRow(a,i); }).join('');
+    var groupId = 'grp-'+label.replace(/\s/g,'').replace(/[^a-zA-Z0-9]/g,'');
+    return '<div style="margin-bottom:10px">'
+      +'<div onclick="var g=document.getElementById(\''+groupId+'\');g.style.display=g.style.display===\'none\'?\'block\':\'none\'" '
+      +'style="display:inline-flex;align-items:center;gap:8px;padding:5px 10px;background:'+bg+';border-radius:6px;cursor:pointer;margin-bottom:6px;user-select:none">'
+      +'<span style="width:8px;height:8px;border-radius:50%;background:'+col+';display:inline-block"></span>'
+      +'<span style="font-size:11px;font-weight:700;color:'+col+'">'+label+' \u00b7 '+assets.length+' assets</span>'
+      +'<span style="font-size:10px;color:'+col+';opacity:.7">\u25be</span>'
+      +'</div>'
+      +'<div id="'+groupId+'" style="display:'+(defaultOpen?'block':'none')+';background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
+      +'<div style="display:grid;grid-template-columns:90px 1fr 1fr 1fr 110px 100px;gap:10px;padding:6px 14px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em">'
+      +'<span>Asset</span><span>AM shift</span><span>PM shift</span><span>Daily total</span><span>MTD</span><span style="text-align:right">Contribution</span>'
+      +'</div>'
+      +rows
+      +'</div></div>';
+  }
+
+  function renderRegistry() {
+    return '<div style="padding:var(--s4)">'
+      +'<div style="font-size:14px;font-weight:700;margin-bottom:4px">Asset Registry</div>'
+      +'<div style="font-size:11px;color:var(--ink3);margin-bottom:16px">'+ASSETS.length+' Taxi assets \u00b7 vehicle master list</div>'
+      +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
+      +'<div style="display:grid;grid-template-columns:40px 100px 1fr 80px 80px 90px;gap:8px;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase">'
+      +'<span>#</span><span>Plate</span><span>Vehicle ID</span><span style="text-align:right">Rev today</span><span style="text-align:right">Rev MTD</span><span style="text-align:right">Days active</span>'
+      +'</div>'
+      +ASSETS.map(function(a,i){
+        var d=getAssetData(a);
+        return '<div style="display:grid;grid-template-columns:40px 100px 1fr 80px 80px 90px;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);font-size:12px;align-items:center;'+(i%2===1?'background:var(--surface)':'')+'">'
+          +'<span style="color:var(--ink3);font-size:11px">'+(i+1)+'</span>'
+          +'<span style="font-family:var(--f-mono);font-weight:700">'+a.plate+'</span>'
+          +'<span style="font-size:10px;color:var(--ink3)">VehicleId: '+a.vehicle_id+'</span>'
+          +'<span style="text-align:right;font-family:var(--f-mono)">'+(d.rev_today>0?fP(d.rev_today):'\u2014')+'</span>'
+          +'<span style="text-align:right;font-family:var(--f-mono)">'+(d.rev_mtd>0?fP(d.rev_mtd):'\u2014')+'</span>'
+          +'<span style="text-align:right;color:var(--ink3)">'+d.days_active_mtd+'d</span>'
+          +'</div>';
+      }).join('')
+      +'</div></div>';
+  }
+
+  function renderMaintenance() {
+    return '<div style="padding:var(--s4)">'
+      +'<div style="font-size:14px;font-weight:700;margin-bottom:4px">Maintenance &amp; Downtime</div>'
+      +'<div style="font-size:11px;color:var(--ink3);margin-bottom:16px">PMS schedule \u00b7 crash tracking \u00b7 repair status</div>'
+      +'<div style="padding:40px;text-align:center;background:var(--card);border:1px solid var(--border);border-radius:var(--rl)">'
+      +'<div style="font-size:32px;margin-bottom:12px">\ud83d\udd27</div>'
+      +'<div style="font-size:14px;font-weight:700;margin-bottom:6px">Maintenance tracking coming soon</div>'
+      +'<div style="font-size:12px;color:var(--ink3);max-width:360px;margin:0 auto;line-height:1.6">PMS schedules, crash reports, and repair status logs will appear here once the maintenance data source is connected.</div>'
+      +'</div></div>';
+  }
+
+  function renderOverview() {
+    return '<div style="padding:var(--s4)">'
+      +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">'
+      +[
+        ['Total assets', TOTAL, 'taxi fleet', 'var(--green)', false],
+        ['Operational', activeCount, 'active today', 'var(--accent)', false],
+        ['Buffer (10%)', bufferCount, 'planned downtime', 'var(--ink3)', false],
+        ['Unplanned', unplanned, unplanned>0?'over buffer \u2014 flag':'within buffer', unplanned>0?'var(--red)':'var(--green)', unplanned>0],
+        ['Lost revenue', fP(lostRev), unplanned+' excess \u00d7 '+fP(tgt), 'var(--amber)', lostRev>0],
+      ].map(function(c){
+        return '<div style="background:var(--card);border:1px solid var(--border);border-left:3px solid '+(c[4]?'var(--red)':'var(--border)')+';border-radius:0 var(--rl) var(--rl) 0;padding:14px 16px">'
+          +'<div style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">'+c[0]+'</div>'
+          +'<div style="font-size:22px;font-weight:700;font-family:var(--f-mono);color:'+c[3]+'">'+c[1]+'</div>'
+          +'<div style="font-size:10px;color:'+(c[4]?'var(--red)':'var(--ink3)')+';margin-top:3px">'+c[2]+'</div>'
+          +'</div>';
+      }).join('')
+      +'</div>'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+      +'<div style="font-size:13px;font-weight:700">Asset performance <span style="font-size:10px;color:var(--ink3);font-weight:400">grouped by state \u00b7 worst first</span></div>'
+      +'<div style="font-size:11px;color:var(--ink3)">daily target '+fP(tgt)+' \u00b7 monthly '+fP(mTgt)+'</div>'
+      +'</div>'
+      +assetGroup(idle, 'Idle \u2014 no revenue', '#EF4444', 'rgba(239,68,68,.08)', true)
+      +assetGroup(underperform, 'Underperforming \u2014 below 60%', '#F59E0B', 'rgba(245,158,11,.08)', true)
+      +assetGroup(onTrack, 'On track \u2014 60\u201399%', '#60A5FA', 'rgba(96,165,250,.08)', false)
+      +assetGroup(above, 'Above target \u2014 100%+', '#34D399', 'rgba(52,211,153,.08)', false)
+      +'<div style="font-size:13px;font-weight:700;margin-top:20px;margin-bottom:10px">Unit economics \u00b7 today</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'
+      +'<div class="card" style="padding:16px 18px">'
+      +'<div style="font-size:11px;font-weight:700;color:var(--ink3);margin-bottom:12px;text-transform:uppercase;letter-spacing:.05em">Fleet avg revenue</div>'
+      +(function(){
+        var totalRev=ASSETS.reduce(function(s,a){return s+getAssetData(a).rev_today;},0);
+        var totalHrs=ASSETS.reduce(function(s,a){return s+getAssetData(a).utilized_hrs;},0);
+        var avgRev=Math.round(totalRev/Math.max(activeCount,1));
+        return [
+          ['Avg rev / asset', fP(avgRev), 'var(--green)'],
+          ['Rev / util hr', totalHrs>0?fP(Math.round(totalRev/totalHrs))+'/hr':'\u2014', 'var(--ink2)'],
+          ['Fixed cost (est.)', '\u2014 '+fP(fixedCost), 'var(--red)'],
+          ['Contribution', fP(avgRev-fixedCost), avgRev-fixedCost>0?'var(--green)':'var(--red)'],
+        ].map(function(r){
+          return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">'
+            +'<span style="color:var(--ink3)">'+r[0]+'</span>'
+            +'<span style="font-family:var(--f-mono);font-weight:600;color:'+r[2]+'">'+r[1]+'</span>'
+            +'</div>';
+        }).join('');
+      })()
+      +'<div style="font-size:9px;color:var(--ink4);margin-top:8px">Fuel costs: driver-input pending \u00b7 fixed costs config-based</div>'
+      +'</div>'
+      +'<div class="card" style="padding:16px 18px">'
+      +'<div style="font-size:11px;font-weight:700;color:var(--ink3);margin-bottom:12px;text-transform:uppercase;letter-spacing:.05em">Shift coverage</div>'
+      +[
+        ['2-shift vehicles', dualShift, dualShift>=40?'var(--green)':'var(--amber)'],
+        ['1-shift only', singleShift, singleShift>10?'var(--amber)':'var(--ink2)'],
+        ['No shift today', noShift, noShift>5?'var(--red)':'var(--ink2)'],
+      ].map(function(r){
+        return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">'
+          +'<span style="color:var(--ink3)">'+r[0]+'</span>'
+          +'<span style="font-family:var(--f-mono);font-weight:600;color:'+r[2]+'">'+r[1]+'</span>'
+          +'</div>';
+      }).join('')
+      +(singleShift>5?'<div style="font-size:9px;color:var(--amber);margin-top:8px">'+singleShift+' single-shift vehicles losing PM revenue</div>':'')
+      +'</div>'
+      +'<div class="card" style="padding:16px 18px">'
+      +'<div style="font-size:11px;font-weight:700;color:var(--ink3);margin-bottom:12px;text-transform:uppercase;letter-spacing:.05em">MTD pacing \u00b7 day '+dayOfMonth+'/'+daysInMonth+'</div>'
+      +[
+        ['Monthly target', fP(mTgt), 'var(--ink2)'],
+        ['Expected by now', fP(expectedByNow), 'var(--ink2)'],
+        ['Fleet avg actual', fP(fleetAvgMtd)+' ('+(mtdPacingPct>100?'+':'')+(mtdPacingPct-100)+'%)', mtdPacingPct>=100?'var(--green)':mtdPacingPct>=80?'var(--amber)':'var(--red)'],
+      ].map(function(r){
+        return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">'
+          +'<span style="color:var(--ink3)">'+r[0]+'</span>'
+          +'<span style="font-family:var(--f-mono);font-weight:600;color:'+r[2]+'">'+r[1]+'</span>'
+          +'</div>';
+      }).join('')
+      +'</div>'
+      +'</div>'
+      +'</div>';
+  }
+
+  var subNav = '<div style="display:flex;gap:4px;padding:var(--s4) var(--s4) 0">'
+    +['overview','registry','maintenance'].map(function(tab){
+      var labels={overview:'Overview',registry:'Registry',maintenance:'Maintenance'};
+      var isActive = ASSETS_SUB_PAGE===tab;
+      return '<button onclick="ASSETS_SUB_PAGE=\''+tab+'\';buildAssets();" '
+        +'style="padding:6px 16px;border:1px solid var(--border);border-radius:var(--rs);font-size:12px;font-weight:600;cursor:pointer;'
+        +(isActive?'background:var(--ink1);color:var(--bg);border-color:var(--ink1);':'background:var(--card);color:var(--ink2);')
+        +'">'+labels[tab]+'</button>';
+    }).join('')
+    +'</div>';
+
+  el.innerHTML = subNav
+    +(ASSETS_SUB_PAGE==='overview'?renderOverview():ASSETS_SUB_PAGE==='registry'?renderRegistry():renderMaintenance());
 }
+
 
 function setAssetFilter(f, el) {
   ASSET_FILTER_KEY = f;
