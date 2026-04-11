@@ -2532,10 +2532,18 @@ function buildFleet() {
     return '<span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;background:'+s.bg+';color:'+s.col+'">'+s.label+'</span>';
   }
 
-  el.innerHTML = (function() {
-    var html = '<div style="max-width:1400px;overflow-x:auto">';
+  var TH = 'style="padding:6px 10px;text-align:left;font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;white-space:nowrap;background:var(--surface);border-bottom:1px solid var(--border)"';
+  var THR = 'style="padding:6px 10px;text-align:right;font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;white-space:nowrap;background:var(--surface);border-bottom:1px solid var(--border)"';
+  var THC = 'style="padding:6px 10px;text-align:center;font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;white-space:nowrap;background:var(--surface);border-bottom:1px solid var(--border)"';
+  function TD(content, extra) { return '<td style="padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle'+(extra?';'+extra:'')+'">' + content + '</td>'; }
+  function TDR(content, extra) { return '<td style="padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle;text-align:right;white-space:nowrap;font-family:var(--f-mono)'+(extra?';'+extra:'')+'">' + content + '</td>'; }
+  function TDC(content, extra) { return '<td style="padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle;text-align:center'+(extra?';'+extra:'')+'">' + content + '</td>'; }
 
-    // Supply Health Summary
+  el.innerHTML = (function() {
+    var p = 'padding:var(--s4)';
+    var html = '<div style="'+p+';overflow-x:auto;min-width:0">';
+
+    // ── 1. Supply Health Cards ────────────────────────────────────────────────
     var summaryCards = ['16','1','2','3','10'].map(function(vtid) {
       var s = SVC[vtid]; if(!s) return '';
       var drivers = DB_FLEET_HEALTH.filter(function(d){ return d.vtid===vtid; });
@@ -2551,7 +2559,7 @@ function buildFleet() {
         +(s.controlled?'<span style="font-size:8px;font-weight:600;padding:1px 5px;border-radius:4px;background:rgba(52,211,153,.15);color:#34D399;margin-left:auto">Managed</span>':'<span style="font-size:8px;font-weight:600;padding:1px 5px;border-radius:4px;background:rgba(96,165,250,.15);color:#60A5FA;margin-left:auto">Market</span>')
         +'</div>'
         +'<div style="font-size:22px;font-weight:700;font-family:var(--f-mono);color:'+health+'">'+activeToday+'</div>'
-        +'<div style="font-size:10px;color:var(--ink3);margin-top:2px">of '+reg+' reg · '+actPct+'% active</div>'
+        +'<div style="font-size:10px;color:var(--ink3);margin-top:2px">of '+reg+' reg \u00b7 '+actPct+'% active</div>'
         +'<div style="height:3px;background:var(--border);border-radius:2px;margin:8px 0;overflow:hidden">'
         +'<div style="height:100%;width:'+actPct+'%;background:'+health+';border-radius:2px"></div></div>'
         +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
@@ -2559,132 +2567,130 @@ function buildFleet() {
         +(lc.Ramping>0?'<span style="font-size:9px;color:#FBBF24">'+lc.Ramping+' ramp</span>':'')
         +(lc.Established>0?'<span style="font-size:9px;color:#34D399">'+lc.Established+' est</span>':'')
         +(lc.Tenured>0?'<span style="font-size:9px;color:#A78BFA">'+lc.Tenured+' tenured</span>':'')
-        +'</div>'
-        +'</div>';
+        +'</div></div>';
     }).join('');
 
-    html += '<div style="padding:var(--s4) var(--s4) 0">'
-      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:16px">'+summaryCards+'</div>'
-      +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:10px 16px;margin-bottom:16px;display:flex;gap:24px;align-items:center">'
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:14px">'+summaryCards+'</div>';
+
+    // ── 2. Exception Bar ──────────────────────────────────────────────────────
+    html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:10px 16px;margin-bottom:16px;display:flex;gap:20px;align-items:center;flex-wrap:wrap">'
       +'<span style="font-size:11px;font-weight:700;color:var(--ink2)">Supply health</span>'
       +'<span style="font-size:11px;color:#34D399">'+taxiTop.length+' taxi on target</span>'
       +'<span style="font-size:11px;color:#F59E0B">'+taxiRisk.length+' at risk</span>'
       +'<span style="font-size:11px;color:var(--ink3)">'+taxiIdle.length+' taxi idle today</span>'
       +'<span style="font-size:11px;color:#60A5FA">'+mktDrivers.filter(function(d){return d.trips_today>0;}).length+' marketplace active</span>'
-      +'<span style="font-size:11px;color:var(--ink3)">'+(taxiLC.New+taxiLC.Ramping)+' new/ramping drivers need context</span>'
-      +'</div></div>';
+      +'<span style="font-size:11px;color:var(--ink3)">'+(taxiLC.New+taxiLC.Ramping)+' new/ramping need context</span>'
+      +'</div>';
 
-    // Taxi section
+    // ── 3. Taxi · Controlled Supply ───────────────────────────────────────────
+    html += '<div style="font-size:13px;font-weight:700;margin:0 0 10px;padding:8px 12px;background:var(--surface);border-radius:var(--r);border-left:3px solid var(--accent)">'
+      +'\ud83d\ude96 Taxi \u00b7 Controlled Supply'
+      +'<span style="font-size:10px;font-weight:400;color:var(--ink3);margin-left:8px">target \u20b13,000/day \u00b7 shift-based</span>'
+      +'</div>';
+
     var taxiSegs = [
-      { label:'On target',  col:'#34D399',       bg:'rgba(52,211,153,.06)', drivers:taxiTop,   statusLabel:'Target met' },
-      { label:'On track',   col:'#60A5FA',       bg:'rgba(96,165,250,.06)', drivers:taxiTrack, statusLabel:'On track'   },
-      { label:'At risk',    col:'#F59E0B',       bg:'rgba(245,158,11,.06)', drivers:taxiRisk,  statusLabel:'At risk'    },
-      { label:'Idle today', col:'var(--ink3)',   bg:'transparent',           drivers:taxiIdle,  statusLabel:'No trips'   },
+      { label:'On target',  col:'#34D399',     bg:'rgba(52,211,153,.06)',  drivers:taxiTop,   statusLabel:'Target met' },
+      { label:'On track',   col:'#60A5FA',     bg:'rgba(96,165,250,.06)',  drivers:taxiTrack, statusLabel:'On track'   },
+      { label:'At risk',    col:'#F59E0B',     bg:'rgba(245,158,11,.06)',  drivers:taxiRisk,  statusLabel:'At risk'    },
+      { label:'Idle today', col:'var(--ink3)', bg:'transparent',            drivers:taxiIdle,  statusLabel:'No trips'   },
     ];
-    var taxiRows = taxiSegs.map(function(seg) {
-      if (seg.drivers.length === 0) return '';
+    taxiSegs.forEach(function(seg) {
+      if (seg.drivers.length === 0) return;
       var rows = seg.drivers.slice(0,15).map(function(d) {
         var pct = Math.min(100, Math.round(d.rev_today/tgt*100));
         var barCol = pct>=100?'#34D399':pct>=60?'#60A5FA':'#F59E0B';
-        return '<div style="display:grid;grid-template-columns:1.5fr 70px 60px 100px 90px 80px 60px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center">'
-          +'<div style="min-width:120px;word-break:break-word"><div style="font-size:12px;font-weight:600">'+d.name+'</div>'
-          +'<div style="font-size:10px;color:var(--ink3)">'+d.days_active+'d active \u00b7 \u20b1'+d.avg_fare+' avg fare</div></div>'
-          +lcBadge(d.lifecycle)
-          +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right">'+d.trips_today+'</div>'
-          +'<div style="font-family:var(--f-mono);font-size:12px;font-weight:700;text-align:right;color:'+barCol+';white-space:nowrap">'+fP(d.rev_today)+'</div>'
-          +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right;color:var(--ink2);white-space:nowrap">'+(d.rev_per_util_hr>0?fP(d.rev_per_util_hr)+'/hr':'—')+'</div>'
-          +'<div style="display:flex;align-items:center;gap:4px">'
+        var bar = '<div style="display:flex;align-items:center;gap:4px;min-width:80px">'
           +'<div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+barCol+';border-radius:2px"></div></div>'
-          +'<span style="font-size:9px;color:var(--ink3);min-width:26px;text-align:right">'+pct+'%</span>'
-          +'</div>'
-          +'<div style="text-align:center"><span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;background:'+seg.bg+';color:'+seg.col+'">'+seg.statusLabel+'</span></div>'
-          +'</div>';
+          +'<span style="font-size:9px;color:var(--ink3);min-width:28px;text-align:right">'+pct+'%</span></div>';
+        return '<tr>'
+          +TD('<div style="font-size:12px;font-weight:600;min-width:140px;word-break:break-word">'+d.name+'</div>'
+            +'<div style="font-size:10px;color:var(--ink3)">'+d.days_active+'d \u00b7 \u20b1'+d.avg_fare+' avg</div>')
+          +TDC(lcBadge(d.lifecycle))
+          +TDR(d.trips_today)
+          +TDR(fP(d.rev_today),'font-size:12px;font-weight:700;color:'+barCol)
+          +TDR(d.rev_per_util_hr>0?fP(d.rev_per_util_hr)+'/hr':'—','color:var(--ink2)')
+          +TD(bar)
+          +TDC('<span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;background:'+seg.bg+';color:'+seg.col+'">'+seg.statusLabel+'</span>')
+          +'</tr>';
       }).join('');
-      var more = seg.drivers.length>15?'<div style="padding:8px 12px;text-align:center;font-size:10px;color:var(--ink3)">+'+(seg.drivers.length-15)+' more</div>':'';
-      return '<div style="margin-bottom:10px">'
-        +'<div style="font-size:9px;font-weight:700;color:'+seg.col+';text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;padding:4px 10px;background:'+seg.bg+';border-radius:6px;display:inline-block">'+seg.label+' \u00b7 '+seg.drivers.length+'</div>'
-        +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
-        +'<div style="display:grid;grid-template-columns:1.5fr 70px 60px 100px 90px 80px 60px;gap:6px;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase">'
-        +'<span>Driver</span><span>Lifecycle</span><span style="text-align:right">Trips</span><span style="text-align:right;white-space:nowrap">Rev today</span><span style="text-align:right;white-space:nowrap">Rev/util hr</span><span style="text-align:right">Target</span><span style="text-align:center">Status</span>'
-        +'</div>'+rows+more+'</div></div>';
-    }).join('');
+      var more = seg.drivers.length>15?'<tr><td colspan="7" style="padding:6px 10px;text-align:center;font-size:10px;color:var(--ink3);border-bottom:1px solid var(--border)">+'+(seg.drivers.length-15)+' more</td></tr>':'';
+      html += '<div style="margin-bottom:10px">'
+        +'<div style="font-size:9px;font-weight:700;color:'+seg.col+';text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;padding:3px 8px;background:'+seg.bg+';border-radius:4px;display:inline-block">'+seg.label+' \u00b7 '+seg.drivers.length+'</div>'
+        +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:auto">'
+        +'<table style="width:100%;border-collapse:collapse">'
+        +'<thead><tr><th '+TH+' style="min-width:140px;'+TH.slice(7)+'">Driver</th><th '+THC+'>Lifecycle</th><th '+THR+'>Trips</th><th '+THR+'>Rev Today</th><th '+THR+'>Rev/Util Hr</th><th '+TH+'>Target</th><th '+THC+'>Status</th></tr></thead>'
+        +'<tbody>'+rows+more+'</tbody></table></div></div>';
+    });
 
-    html += '<div style="padding:0 var(--s4) 16px">'
-      +'<div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px">'
-      +'\ud83d\ude96 Taxi \u00b7 Controlled Supply'
-      +'<span style="font-size:10px;font-weight:400;color:var(--ink3)">target \u20b13,000/day \u00b7 shift-based</span>'
-      +'</div>'+taxiRows+'</div>';
+    // ── 4. Marketplace Supply ─────────────────────────────────────────────────
+    html += '<div style="font-size:13px;font-weight:700;margin:16px 0 10px;padding:8px 12px;background:var(--surface);border-radius:var(--r);border-left:3px solid var(--accent)">'
+      +'\ud83d\udedb Marketplace Supply'
+      +'<span style="font-size:10px;font-weight:400;color:var(--ink3);margin-left:8px">Moto \u00b7 Go Car \u00b7 Go SUV \u00b7 e-Trike \u00b7 contribution-based</span>'
+      +'</div>';
 
-    // Marketplace section
-    var mktRows = ['1','2','3','10'].map(function(vtid) {
-      var s = SVC[vtid]; if(!s) return '';
-      var drivers = DB_FLEET_HEALTH.filter(function(d){ return d.vtid===vtid && (searchQ===''||d.name.toLowerCase().indexOf(searchQ.toLowerCase())>=0); });
-      if (drivers.length === 0) return '';
+    ['1','2','3','10'].forEach(function(vtid) {
+      var s = SVC[vtid]; if(!s) return;
+      var drivers = DB_FLEET_HEALTH.filter(function(d){ return d.vtid===vtid; });
+      if (drivers.length === 0) return;
       var active = drivers.filter(function(d){ return d.trips_today>0; });
       var rows = drivers.slice(0,12).map(function(d,i) {
         var ml = mktLabel(d);
-        return '<div style="display:grid;grid-template-columns:1.5fr 70px 55px 90px 85px 65px 75px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center;'+(i%2===0?'':'background:var(--surface)')+'">'
-          +'<div style="min-width:120px;word-break:break-word"><div style="font-size:12px;font-weight:600">'+d.name+'</div>'
-          +'<div style="font-size:10px;color:var(--ink3)">'+d.days_active+'d active'+(d.avg_rating>0?' \u00b7 \u2b50'+d.avg_rating:'')+'</div></div>'
-          +lcBadge(d.lifecycle)
-          +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right">'+d.trips_today+'</div>'
-          +'<div style="font-family:var(--f-mono);font-size:12px;font-weight:700;text-align:right;white-space:nowrap">'+fP(d.rev_today)+'</div>'
-          +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right;color:#34D399;white-space:nowrap">'+fP(d.commission_today)+'</div>'
-          +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right;color:var(--ink3)">'+d.trips_mtd+'</div>'
-          +'<div style="text-align:center"><span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:10px;background:'+ml.bg+';color:'+ml.c+'">'+ml.l+'</span></div>'
-          +'</div>';
+        return '<tr style="'+(i%2===0?'':'background:var(--surface)')+'">'
+          +TD('<div style="font-size:12px;font-weight:600;min-width:140px;word-break:break-word">'+d.name+'</div>'
+            +'<div style="font-size:10px;color:var(--ink3)">'+d.days_active+'d'+(d.avg_rating>0?' \u00b7 \u2b50'+d.avg_rating:'')+'</div>')
+          +TDC(lcBadge(d.lifecycle))
+          +TDR(d.trips_today)
+          +TDR(fP(d.rev_today),'font-size:12px;font-weight:700')
+          +TDR(fP(d.commission_today),'color:#34D399')
+          +TDR(d.trips_mtd,'color:var(--ink3)')
+          +TDC('<span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:10px;background:'+ml.bg+';color:'+ml.c+'">'+ml.l+'</span>')
+          +'</tr>';
       }).join('');
-      var more = drivers.length>12?'<div style="padding:8px 12px;text-align:center;font-size:10px;color:var(--ink3)">+'+(drivers.length-12)+' more \u00b7 use search below</div>':'';
-      return '<div style="margin-bottom:12px">'
+      var more = drivers.length>12?'<tr><td colspan="7" style="padding:6px 10px;text-align:center;font-size:10px;color:var(--ink3);border-bottom:1px solid var(--border)">+'+(drivers.length-12)+' more</td></tr>':'';
+      html += '<div style="margin-bottom:12px">'
         +'<div style="font-size:11px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:6px">'
         +'<span>'+s.icon+' '+s.label+'</span>'
         +'<span style="font-size:10px;color:var(--ink3);font-weight:400">'+active.length+' active today</span>'
         +'</div>'
-        +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
-        +'<div style="display:grid;grid-template-columns:1.5fr 70px 55px 90px 85px 65px 75px;gap:6px;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase">'
-        +'<span>Driver</span><span>Lifecycle</span><span style="text-align:right">Trips</span><span style="text-align:right;white-space:nowrap">GTV today</span><span style="text-align:right;white-space:nowrap">Commission</span><span style="text-align:right;white-space:nowrap">MTD trips</span><span style="text-align:center">Activity</span>'
-        +'</div>'+rows+more+'</div></div>';
-    }).join('');
+        +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:auto">'
+        +'<table style="width:100%;border-collapse:collapse">'
+        +'<thead><tr><th '+TH+'>Driver</th><th '+THC+'>Lifecycle</th><th '+THR+'>Trips</th><th '+THR+'>GTV Today</th><th '+THR+'>Commission</th><th '+THR+'>MTD Trips</th><th '+THC+'>Activity</th></tr></thead>'
+        +'<tbody>'+rows+more+'</tbody></table></div></div>';
+    });
 
-    html += '<div style="padding:0 var(--s4) 16px">'
-      +'<div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px">'
-      +'\ud83d\udedb Marketplace Supply'
-      +'<span style="font-size:10px;font-weight:400;color:var(--ink3)">Moto \u00b7 Go Car \u00b7 Go SUV \u00b7 e-Trike \u00b7 contribution-based</span>'
-      +'</div>'+mktRows+'</div>';
-
-    // Driver Directory
-    var dirRows = DB_FLEET_HEALTH.filter(function(d){ return d.name.toLowerCase().indexOf(searchQ.toLowerCase())>=0; }).slice(0,20).map(function(d,i) {
-      var s = SVC[d.vtid] || { icon:'?', label:'?', controlled:false };
-      var ml = s.controlled
-        ? (d.rev_today>=tgt?{l:'On target',c:'#34D399',bg:'rgba(52,211,153,.1)'}:d.rev_today>=tgt*0.6?{l:'On track',c:'#60A5FA',bg:'rgba(96,165,250,.1)'}:d.rev_today>0?{l:'At risk',c:'#F59E0B',bg:'rgba(245,158,11,.1)'}:{l:'Idle',c:'var(--ink4)',bg:'var(--surface)'})
-        : mktLabel(d);
-      return '<div style="display:grid;grid-template-columns:1fr 60px 60px 80px 80px 70px 80px 70px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center;'+(i%2===0?'':'background:var(--surface)')+'">'
-        +'<div style="font-size:12px;font-weight:600">'+d.name+'</div>'
-        +'<div style="font-size:10px;color:var(--ink3)">'+s.icon+' '+s.label+'</div>'
-        +lcBadge(d.lifecycle)
-        +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right">'+fP(d.rev_today)+'</div>'
-        +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right;color:#34D399">'+fP(d.commission_today)+'</div>'
-        +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right;color:var(--ink3)">'+d.trips_mtd+'</div>'
-        +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right">'+fP(d.rev_mtd)+'</div>'
-        +'<div style="text-align:center"><span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;background:'+ml.bg+';color:'+ml.c+'">'+ml.l+'</span></div>'
-        +'</div>';
-    }).join('');
-
-    var dirContent = searchQ
-      ? '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
-        +'<div style="display:grid;grid-template-columns:1fr 60px 60px 80px 80px 70px 80px 70px;gap:6px;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase">'
-        +'<span>Driver</span><span>Service</span><span>Lifecycle</span><span style="text-align:right">Rev today</span><span style="text-align:right">Commission</span><span style="text-align:right">Trips MTD</span><span style="text-align:right">Rev MTD</span><span style="text-align:center">Status</span>'
-        +'</div>'+dirRows+'</div>'
-      : '<div style="padding:20px;text-align:center;color:var(--ink3);font-size:12px;background:var(--card);border:1px solid var(--border);border-radius:var(--rl)">Type a name above to search all drivers across all services</div>';
-
-    html += '<div style="padding:0 var(--s4) var(--s4)">'
-      +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">'
-      +'<div style="font-size:13px;font-weight:700">Driver Directory</div>'
+    // ── 5. Driver Directory ───────────────────────────────────────────────────
+    html += '<div style="font-size:13px;font-weight:700;margin:16px 0 10px;padding:8px 12px;background:var(--surface);border-radius:var(--r);border-left:3px solid var(--accent)">Driver Directory</div>';
+    html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">'
       +'<input type="text" placeholder="Search by name\u2026" value="'+searchQ.replace(/"/g,'&quot;')+'"'
       +' oninput="window.FLEET_SEARCH=this.value;buildFleet();"'
-      +' style="flex:1;max-width:280px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--rs);background:var(--surface);color:var(--ink1);font-size:12px"/>'
+      +' style="flex:1;max-width:320px;padding:7px 12px;border:1px solid var(--border);border-radius:var(--rs);background:var(--surface);color:var(--ink1);font-size:12px"/>'
       +'<div style="font-size:11px;color:var(--ink3)">'+DB_FLEET_HEALTH.length+' total drivers</div>'
-      +'</div>'+dirContent+'</div>';
+      +'</div>';
+
+    if (searchQ) {
+      var dirRows = DB_FLEET_HEALTH.filter(function(d){ return d.name.toLowerCase().indexOf(searchQ.toLowerCase())>=0; }).slice(0,30).map(function(d,i) {
+        var s = SVC[d.vtid] || { icon:'?', label:'?', controlled:false };
+        var ml = s.controlled
+          ? (d.rev_today>=tgt?{l:'On target',c:'#34D399',bg:'rgba(52,211,153,.1)'}:d.rev_today>=tgt*0.6?{l:'On track',c:'#60A5FA',bg:'rgba(96,165,250,.1)'}:d.rev_today>0?{l:'At risk',c:'#F59E0B',bg:'rgba(245,158,11,.1)'}:{l:'Idle',c:'var(--ink4)',bg:'var(--surface)'})
+          : mktLabel(d);
+        return '<tr style="'+(i%2===0?'':'background:var(--surface)')+'">'
+          +TD('<div style="font-size:12px;font-weight:600;min-width:140px;word-break:break-word">'+d.name+'</div>')
+          +TD('<span style="font-size:11px">'+s.icon+' '+s.label+'</span>','white-space:nowrap')
+          +TDC(lcBadge(d.lifecycle))
+          +TDR(fP(d.rev_today),'font-weight:700')
+          +TDR(fP(d.commission_today),'color:#34D399')
+          +TDR(d.trips_mtd,'color:var(--ink3)')
+          +TDR(fP(d.rev_mtd))
+          +TDC('<span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;background:'+ml.bg+';color:'+ml.c+'">'+ml.l+'</span>')
+          +'</tr>';
+      }).join('');
+      html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:auto">'
+        +'<table style="width:100%;border-collapse:collapse">'
+        +'<thead><tr><th '+TH+'>Driver</th><th '+TH+'>Service</th><th '+THC+'>Lifecycle</th><th '+THR+'>Rev Today</th><th '+THR+'>Commission</th><th '+THR+'>Trips MTD</th><th '+THR+'>Rev MTD</th><th '+THC+'>Status</th></tr></thead>'
+        +'<tbody>'+dirRows+'</tbody></table></div>';
+    } else {
+      html += '<div style="padding:20px;text-align:center;color:var(--ink3);font-size:12px;background:var(--card);border:1px solid var(--border);border-radius:var(--rl)">Type a name above to search all '+DB_FLEET_HEALTH.length+' drivers across all services</div>';
+    }
 
     html += '</div>';
     return html;
