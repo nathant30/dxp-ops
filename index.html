@@ -1030,6 +1030,8 @@ function dbRefreshAll() {
         var inTripNow  = Number(r.in_trip_now || 0);
         DB_QUEUED_NOW[vtid]  = queuedNow;
         DB_IN_TRIP_NOW[vtid] = inTripNow;
+        // Keep DB_ACTIVE_NOW for backward compatibility with any other code that references it
+        if (typeof DB_ACTIVE_NOW !== 'undefined') DB_ACTIVE_NOW[vtid] = inTripNow;
         DB_SERVICES[vtid] = {
           trips:          Number(r.trips          || 0),
           cancelled:      Number(r.cancelled      || 0),
