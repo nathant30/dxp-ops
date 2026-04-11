@@ -580,7 +580,7 @@ svg{flex-shrink:0}
       </button>
       <button class="nb" id="nb-teams" onclick="goS('teams')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/></svg>
-        <span>Teams</span><span class="nb-tip">Pods &amp; Captains</span>
+        <span>Pods</span><span class="nb-tip">Pods &amp; Captains</span>
       </button>
       <button class="nb" id="nb-finance" onclick="goS('finance')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M7 15h2M12 15h2"/></svg>
@@ -609,7 +609,7 @@ svg{flex-shrink:0}
 <div class="content"><div class="asset-grid" id="asset-grid"></div></div>
       </section>
       <section class="sec" id="sec-teams">
-        <div class="ph"><div class="ph-left"><div class="ph-title">Teams</div><div class="ph-sub">Pods, captains &amp; collective performance</div></div><div class="ph-actions"><button class="btn btn-p" onclick="showNewPodWizard()">+ New Pod</button></div></div>
+        <div class="ph"><div class="ph-left"><div class="ph-title">Pods</div><div class="ph-sub">Pods, captains &amp; collective performance</div></div><div class="ph-actions"><button class="btn btn-p" onclick="showNewPodWizard()">+ New Pod</button></div></div>
         <div class="content" id="teams-content"></div>
       </section>
 
@@ -5169,14 +5169,58 @@ function buildTeams() {
   const el = document.getElementById('teams-content');
   if (!el) return;
   if (ACTIVE_SERVICE !== 'taxi' && ACTIVE_SERVICE !== 'all') {
-    var _svcVtid = { 'rideshare': '1', 'moto-regular': '1', 'go-car': '2', 'go-suv': '3' }[ACTIVE_SERVICE];
-    var _svcMeta = SVC_META[_svcVtid] || {};
-    el.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:400px;text-align:center;padding:60px 24px">'
-      + '<div style="font-size:48px;margin-bottom:16px">👥</div>'
-      + '<div style="font-size:18px;font-weight:700;color:var(--ink1);margin-bottom:8px">Teams — Taxi Fleet Only</div>'
-      + '<div style="font-size:13px;color:var(--ink3);max-width:380px;line-height:1.7;margin-bottom:20px">Pod and team management applies to salaried Taxi drivers under the DXP program. ' + (_svcMeta.label || 'Partner') + ' partners are self-managed.</div>'
-      + '<button class="btn btn-s" onclick="setActiveService(\'taxi\')">Switch to Taxi</button>'
-      + '</div>';
+    var _vtidMap = { 'rideshare': ['1','2','3'], 'moto-regular': ['1'], 'go-car': ['2'], 'go-suv': ['3'] };
+    var _vtids = _vtidMap[ACTIVE_SERVICE] || ['1'];
+    var _vtidLabels = { '1': 'Moto Regular', '2': 'Go Car', '3': 'Go SUV' };
+    var _grouped = {};
+    (DB_RIDESHARE_PERF || []).forEach(function(r) {
+      if (_vtids.indexOf(r.vtid) === -1) return;
+      if (!_grouped[r.vtid]) _grouped[r.vtid] = [];
+      _grouped[r.vtid].push(r);
+    });
+    var _html = '<div style="padding:20px 0">'
+      + '<div style="font-size:15px;font-weight:700;margin-bottom:4px">Marketplace Cohorts</div>'
+      + '<div style="font-size:11px;color:var(--ink3);margin-bottom:20px">contribution-based groupings only &middot; no enforcement</div>';
+    _vtids.forEach(function(vtid) {
+      var drivers = (_grouped[vtid] || []).slice().sort(function(a,b){ return (b.commission||0)-(a.commission||0); });
+      var label = _vtidLabels[vtid] || 'Service';
+      var totalComm = drivers.reduce(function(s,d){ return s+(d.commission||0); }, 0);
+      var high = drivers.filter(function(d){ return d.commission >= 5000; });
+      var mid  = drivers.filter(function(d){ return d.commission >= 2000 && d.commission < 5000; });
+      var low  = drivers.filter(function(d){ return d.commission < 2000; });
+      _html += '<div style="margin-bottom:20px">'
+        + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'
+        + '<div style="font-size:13px;font-weight:700">'+label+'</div>'
+        + '<div style="font-size:11px;color:var(--ink3)">'+drivers.length+' drivers &middot; &#x20b1;'+Math.round(totalComm).toLocaleString()+' commission MTD</div>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">'
+        + [['🟢 High', high.length, '&#x20b1;5k+ commission', 'var(--green)'],
+           ['🔵 Mid',  mid.length,  '&#x20b1;2–5k commission', 'var(--accent)'],
+           ['🟡 Low',  low.length,  'below &#x20b1;2k', 'var(--amber)']].map(function(c){
+          return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:12px 14px">'
+            + '<div style="font-size:11px;color:var(--ink3);margin-bottom:4px">'+c[0]+'</div>'
+            + '<div style="font-size:20px;font-weight:700;color:'+c[3]+'">'+c[1]+'</div>'
+            + '<div style="font-size:10px;color:var(--ink3)">'+c[2]+'</div>'
+            + '</div>';
+        }).join('')
+        + '</div>'
+        + '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
+        + '<div style="display:grid;grid-template-columns:1fr 80px 80px 80px 90px;gap:8px;padding:7px 14px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase">'+
+          '<span>Driver</span><span style="text-align:right">Trips</span><span style="text-align:right">GTV</span><span style="text-align:right">Commission</span><span style="text-align:right">Avg fare</span></div>'
+        + drivers.slice(0, 20).map(function(d, i) {
+          return '<div style="display:grid;grid-template-columns:1fr 80px 80px 80px 90px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);font-size:12px;align-items:center;'+(i%2===1?'background:var(--surface)':'')+'">'
+            + '<span style="font-weight:600">'+d.name+'</span>'
+            + '<span style="text-align:right;font-family:var(--f-mono)">'+d.trips+'</span>'
+            + '<span style="text-align:right;font-family:var(--f-mono)">&#x20b1;'+Math.round(d.gtv||0).toLocaleString()+'</span>'
+            + '<span style="text-align:right;font-family:var(--f-mono);font-weight:700;color:var(--green)">&#x20b1;'+Math.round(d.commission||0).toLocaleString()+'</span>'
+            + '<span style="text-align:right;font-family:var(--f-mono)">&#x20b1;'+Math.round(d.avg_fare||0).toLocaleString()+'</span>'
+            + '</div>';
+        }).join('')
+        + (drivers.length > 20 ? '<div style="padding:8px 14px;font-size:10px;color:var(--ink3);text-align:center">+'+(drivers.length-20)+' more drivers</div>' : '')
+        + '</div></div>';
+    });
+    _html += '</div>';
+    el.innerHTML = _html;
     return;
   }
   const pods = Object.values(PODS || {});
@@ -5228,24 +5272,36 @@ function renderPodOverview() {
     checkins: (POD_CHECKINS[p.id]||[]),
   })).sort((a, b) => b.health - a.health);
 
-  // Fleet avg for comparison
-  const fleetAvgHealth = Math.round(podData.reduce((s,p) => s + p.health, 0) / podData.length);
-  const fleetAvgRph = Math.round(D4W.reduce((s,d) => s + (d.rph||0), 0) / D4W.length);
+  // Status buckets
+  const podStatuses = podData.map(function(p) {
+    if (p.health >= 80) return 'high';
+    if (p.health >= 60) return 'stable';
+    if (p.health >= 40) return 'risk';
+    return 'failing';
+  });
+  const statusCounts = { high: 0, stable: 0, risk: 0, failing: 0 };
+  podStatuses.forEach(function(s) { statusCounts[s]++; });
 
   el.innerHTML = `
   <!-- Fleet summary bar -->
-  <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-    ${[
-      ['Fleet Avg Health', fleetAvgHealth+'%', fleetAvgHealth>=70?'var(--green)':fleetAvgHealth>=50?'var(--amber)':'var(--red)'],
-      ['Pods Active', pods.length, 'var(--accent)'],
-      ['Unassigned', unassigned.length, unassigned.length>0?'var(--amber)':'var(--green)'],
-      ['Locked Pods', pods.filter(p=>POD_LOCKS[p.id]?.locked).length, 'var(--ink3)'],
-    ].map(([l,v,c])=>`<div class="stat" style="flex:1;min-width:120px">
-      <div class="stat-label">${l}</div>
-      <div class="stat-val" style="font-size:20px;color:${c}">${v}</div>
-      <div class="stat-accent" style="background:${c}"></div>
-    </div>`).join('')}
-    <div style="display:flex;align-items:center;gap:6px">
+  <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1">
+      ${[
+        ['🟢', statusCounts.high,    'High Performing', 'var(--green)'],
+        ['🔵', statusCounts.stable,  'Stable',          'var(--accent)'],
+        ['🟡', statusCounts.risk,    'At Risk',         'var(--amber)'],
+        ['🔴', statusCounts.failing, 'Failing',         'var(--red)'],
+      ].map(([ico,cnt,lbl,col])=>`<div style="display:flex;align-items:center;gap:5px;padding:5px 12px;background:var(--card);border:1px solid var(--border);border-radius:20px;font-size:11px">
+        <span>${ico}</span>
+        <span style="font-weight:700;color:${col}">${cnt}</span>
+        <span style="color:var(--ink3)">${lbl}</span>
+      </div>`).join('')}
+      <div style="display:flex;align-items:center;gap:5px;padding:5px 12px;background:var(--card);border:1px solid var(--border);border-radius:20px;font-size:11px">
+        <span style="color:var(--ink3)">Unassigned</span>
+        <span style="font-weight:700;color:${unassigned.length>0?'var(--amber)':'var(--green)'}">${unassigned.length}</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px">
       <button class="btn btn-s btn-xs" onclick="setPodTab('allocate',document.getElementById('pt-allocate'))">⚡ Re-allocate</button>
       <button class="btn btn-p btn-xs" onclick="showNewPodWizard()">+ New Pod</button>
     </div>
@@ -5254,7 +5310,9 @@ function renderPodOverview() {
   <!-- Pod grid -->
   <div class="pod-grid">
     ${podData.map(p => {
-      const hcol = p.health>=70?'var(--green)':p.health>=50?'var(--amber)':'var(--red)';
+      const hcol = p.health>=80?'var(--green)':p.health>=60?'var(--accent)':p.health>=40?'var(--amber)':'var(--red)';
+      const statusLabel = p.health>=80?'High Performing':p.health>=60?'Stable':p.health>=40?'At Risk':'Failing';
+      const statusBg    = p.health>=80?'rgba(52,211,153,.12)':p.health>=60?'rgba(96,165,250,.12)':p.health>=40?'rgba(245,158,11,.12)':'rgba(239,68,68,.12)';
       const cap = p.members.find(m => m.id === p.captainId);
       const avgCsat = p.members.length ? (p.members.reduce((s,d)=>s+(d.csat||0),0)/p.members.length).toFixed(2) : '—';
       const avgRph  = p.members.length ? Math.round(p.members.reduce((s,d)=>s+(d.rph||0),0)/p.members.length) : 0;
@@ -5262,19 +5320,59 @@ function renderPodOverview() {
       const lastCheckin = p.checkins.length ? p.checkins[p.checkins.length-1] : null;
       const daysSinceCheckin = lastCheckin ? Math.floor((Date.now()-new Date(lastCheckin.date).getTime())/86400000) : 99;
       const checkinAlert = daysSinceCheckin > 14;
+
+      // Variance: top vs bottom driver gap
+      const sorted = p.members.slice().sort(function(a,b){ return (b.rph||0)-(a.rph||0); });
+      const topRph = sorted[0] ? (sorted[0].rph||0) : 0;
+      const botRph = sorted[sorted.length-1] ? (sorted[sorted.length-1].rph||0) : 0;
+      const variance = topRph - botRph;
+      const varianceCol = variance > 150 ? 'var(--red)' : variance > 80 ? 'var(--amber)' : 'var(--green)';
+      const varianceStr = p.members.length > 1
+        ? `<span style="font-size:9px;color:${varianceCol}">Spread ₱${topRph} vs ₱${botRph} · gap ₱${variance}/hr</span>`
+        : '';
+
+      // Captain lifecycle bar
+      const daysIn = cap ? Math.floor((Date.now()-new Date(p.captainStart||Date.now()).getTime())/86400000) : 0;
+      const daysLeft = Math.max(0, 60 - daysIn);
+      const capPct = Math.min(100, Math.round(daysIn/60*100));
+      const capCol = daysLeft <= 10 ? 'var(--red)' : daysLeft <= 20 ? 'var(--amber)' : 'var(--green)';
+      const captainBlock = cap
+        ? `<div style="margin-top:10px">
+            <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px">
+              <span style="color:var(--ink3)">👑 <b>${cap.name}</b></span>
+              <span style="color:${capCol};font-weight:600">Day ${daysIn} / 60${daysLeft<=10?' ⚠ rotate soon':''}</span>
+            </div>
+            <div style="height:3px;background:var(--border);border-radius:2px;overflow:hidden">
+              <div style="height:100%;width:${capPct}%;background:${capCol};border-radius:2px"></div>
+            </div>
+          </div>`
+        : `<div style="margin-top:10px"><button class="btn btn-s btn-xs" onclick="event.stopPropagation();showCaptainSuggestion('${p.id}')">Assign Captain →</button></div>`;
+
       return `<div class="pcard" onclick="openPodDetailDrawer('${p.id}')">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-          <div style="font-size:15px;font-weight:700;flex:1">${p.name}</div>
-          ${p.locked ? '<span class="badge badge-gray">🔒 Locked</span>' : ''}
-          ${p.incidents>0 ? `<span class="badge badge-red">⚠ ${p.incidents}</span>` : ''}
-          ${checkinAlert ? '<span class="badge badge-amber" title="Check-in overdue">14d+</span>' : ''}
-          <span style="font-size:18px;font-weight:800;font-family:var(--f-mono);color:${hcol}">${p.health}%</span>
+        <!-- Header: name + status badge -->
+        <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:8px">
+          <div style="flex:1">
+            <div style="font-size:15px;font-weight:700">${p.name}</div>
+            ${varianceStr}
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+            <span style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;background:${statusBg};color:${hcol};white-space:nowrap">${statusLabel}</span>
+            <div style="display:flex;gap:3px">
+              ${p.locked ? '<span class="badge badge-gray" style="font-size:9px">🔒</span>' : ''}
+              ${p.incidents>0 ? `<span class="badge badge-red" style="font-size:9px">⚠ ${p.incidents}</span>` : ''}
+              ${checkinAlert ? '<span class="badge badge-amber" style="font-size:9px">14d+</span>' : ''}
+            </div>
+          </div>
         </div>
-        <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:10px">
-          <div style="height:100%;width:${p.health}%;background:${hcol};border-radius:3px"></div>
+        <!-- Health bar -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+          <div style="flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${p.health}%;background:${hcol};border-radius:3px"></div>
+          </div>
+          <span style="font-size:13px;font-weight:800;font-family:var(--f-mono);color:${hcol}">${p.health}%</span>
         </div>
         <!-- Member avatars -->
-        <div style="display:flex;align-items:center;gap:-4px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;margin-bottom:10px">
           ${p.members.slice(0,8).map((m,i)=>{
             const col=['#0066FF','#059669','#D97706','#7C3AED','#DB2777','#0891B2','#DC2626','#92400E'][i%8];
             const init=m.name.split(' ').map(n=>n[0]).join('').slice(0,2);
@@ -5294,7 +5392,8 @@ function renderPodOverview() {
               <div style="font-size:13px;font-weight:700;font-family:var(--f-mono);color:${c}">${v}</div>
             </div>`).join('')}
         </div>
-        ${cap ? `<div style="margin-top:8px;font-size:10px;color:var(--ink3)">👑 Captain: <b>${cap.name}</b></div>` : `<div style="margin-top:8px"><button class="btn btn-s btn-xs" onclick="event.stopPropagation();showCaptainSuggestion('${p.id}')">Assign Captain →</button></div>`}
+        <!-- Captain lifecycle -->
+        ${captainBlock}
         ${checkinAlert ? `<div style="margin-top:6px;font-size:10px;color:var(--amber)">⚠ Check-in overdue (${daysSinceCheckin}d)</div>` : ''}
       </div>`;
     }).join('')}
