@@ -602,7 +602,7 @@ svg{flex-shrink:0}
       <section class="sec on" id="sec-cmd"><div id="cmd-content" class="content"></div></section>
       <section class="sec" id="sec-fleet">
         <div class="ph"><div class="ph-left"><div class="ph-title">Fleet</div><div class="ph-sub" id="fleet-sub"></div></div><div class="ph-actions"><button class="btn btn-s" onclick="downloadFleetCSV2()">⬇ Export</button></div></div>
-        <div class="fbar" id="fleet-fbar"><div class="fbar-search"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg><input id="fleet-search" placeholder="Search drivers…" oninput="filterFleet()"></div><button class="fpill on" id="fp-all" onclick="setFleetFilter('all',this)">All</button><button class="fpill" id="fp-champion" onclick="setFleetFilter('champion',this)">Champion</button><button class="fpill" id="fp-pro" onclick="setFleetFilter('pro',this)">Pro</button><button class="fpill" id="fp-active" onclick="setFleetFilter('active',this)">Active</button><button class="fpill" id="fp-bench" onclick="setFleetFilter('bench',this)">Bench</button><button class="fpill" id="fp-risk" onclick="setFleetFilter('risk',this)">⚠ At Risk</button><span class="fcount" id="fleet-count"></span></div>
+        <div class="fbar" id="fleet-fbar"><div class="fbar-search"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg><input id="fleet-search" placeholder="Search drivers…" oninput="window.FLEET_SEARCH=this.value;buildFleet();"></div><button class="fpill on" id="fp-all" onclick="window.FLEET_TAXI_FILTER='all';buildFleet();">All</button><button class="fpill" id="fp-champion" onclick="window.FLEET_TAXI_FILTER='champion';buildFleet();">Champion</button><button class="fpill" id="fp-pro" onclick="window.FLEET_TAXI_FILTER='pro';buildFleet();">Pro</button><button class="fpill" id="fp-active" onclick="window.FLEET_TAXI_FILTER='active';buildFleet();">Active</button><button class="fpill" id="fp-bench" onclick="window.FLEET_TAXI_FILTER='bench';buildFleet();">Bench</button><button class="fpill" id="fp-risk" onclick="window.FLEET_TAXI_FILTER='risk';buildFleet();">⚠ At Risk</button><span class="fcount" id="fleet-count"></span></div>
         <div class="content"><div class="driver-grid" id="fleet-grid"></div></div>
       </section>
       <section class="sec" id="sec-assets">
@@ -2501,11 +2501,19 @@ function buildFleet() {
   var taxiDrivers = DB_FLEET_HEALTH.filter(function(d){ return d.vtid==='16'; });
   var mktDrivers  = DB_FLEET_HEALTH.filter(function(d){ return d.vtid!=='16'; });
 
+  if (!window.FLEET_TAXI_FILTER) window.FLEET_TAXI_FILTER = 'all';
+  var filteredTaxi = taxiDrivers;
+  if (window.FLEET_TAXI_FILTER === 'champion') filteredTaxi = taxiDrivers.filter(function(d){ return d.rev_today >= 3000; });
+  else if (window.FLEET_TAXI_FILTER === 'pro')   filteredTaxi = taxiDrivers.filter(function(d){ return d.rev_today >= 2500 && d.rev_today < 3000; });
+  else if (window.FLEET_TAXI_FILTER === 'active') filteredTaxi = taxiDrivers.filter(function(d){ return d.rev_today >= 1800 && d.rev_today < 2500; });
+  else if (window.FLEET_TAXI_FILTER === 'bench')  filteredTaxi = taxiDrivers.filter(function(d){ return d.rev_today > 0 && d.rev_today < 1200; });
+  else if (window.FLEET_TAXI_FILTER === 'risk')   filteredTaxi = taxiDrivers.filter(function(d){ return d.rev_today >= 1200 && d.rev_today < 1800; });
+
   var tgt = TAXI_DAILY_TARGET;
-  var taxiTop    = taxiDrivers.filter(function(d){ return d.rev_today >= tgt; });
-  var taxiTrack  = taxiDrivers.filter(function(d){ return d.rev_today >= tgt*0.6 && d.rev_today < tgt; });
-  var taxiRisk   = taxiDrivers.filter(function(d){ return d.rev_today > 0 && d.rev_today < tgt*0.6; });
-  var taxiIdle   = taxiDrivers.filter(function(d){ return d.rev_today === 0; });
+  var taxiTop    = filteredTaxi.filter(function(d){ return d.rev_today >= tgt; });
+  var taxiTrack  = filteredTaxi.filter(function(d){ return d.rev_today >= tgt*0.6 && d.rev_today < tgt; });
+  var taxiRisk   = filteredTaxi.filter(function(d){ return d.rev_today > 0 && d.rev_today < tgt*0.6; });
+  var taxiIdle   = filteredTaxi.filter(function(d){ return d.rev_today === 0; });
 
   var mktSorted = mktDrivers.slice().sort(function(a,b){ return b.rev_mtd - a.rev_mtd; });
   var median = mktSorted.length > 0 ? mktSorted[Math.floor(mktSorted.length/2)].rev_mtd : 0;
@@ -2626,18 +2634,40 @@ function buildFleet() {
     // ── 4. Marketplace Supply ─────────────────────────────────────────────────
     html += '<div style="font-size:13px;font-weight:700;margin:16px 0 10px;padding:8px 12px;background:var(--surface);border-radius:var(--r);border-left:3px solid var(--accent)">'
       +'\ud83d\udedb Marketplace Supply'
-      +'<span style="font-size:10px;font-weight:400;color:var(--ink3);margin-left:8px">Moto \u00b7 Go Car \u00b7 Go SUV \u00b7 e-Trike \u00b7 contribution-based</span>'
+      +'<span style="font-size:10px;font-weight:400;color:var(--ink3);margin-left:8px">contribution-based</span>'
       +'</div>';
 
-    ['1','2','3','10'].forEach(function(vtid) {
+    if (!window.FLEET_MKT_TAB) window.FLEET_MKT_TAB = '1';
+    var MKT_TABS = [
+      { vtid:'1',  label:'\ud83d\udef5 Moto Regular' },
+      { vtid:'2',  label:'\ud83d\ude97 Go Car' },
+      { vtid:'3',  label:'\ud83d\ude99 Go SUV' },
+      { vtid:'10', label:'\ud83d\udefa e-Trike' },
+    ];
+    html += '<div style="display:flex;gap:2px;margin-bottom:12px;border-bottom:2px solid var(--border)">'
+      + MKT_TABS.map(function(t) {
+          var isOn = window.FLEET_MKT_TAB === t.vtid;
+          return '<button onclick="window.FLEET_MKT_TAB=\'' + t.vtid + '\';buildFleet();" '
+            + 'style="padding:8px 16px;border:none;background:none;cursor:pointer;font-size:12px;font-weight:'
+            + (isOn?'700':'500') + ';color:' + (isOn?'var(--accent)':'var(--ink3)')
+            + ';border-bottom:2px solid ' + (isOn?'var(--accent)':'transparent')
+            + ';margin-bottom:-2px">' + t.label + '</button>';
+        }).join('')
+      + '</div>';
+
+    (function() {
+      var vtid = window.FLEET_MKT_TAB;
       var s = SVC[vtid]; if(!s) return;
       var drivers = DB_FLEET_HEALTH.filter(function(d){ return d.vtid===vtid; });
-      if (drivers.length === 0) return;
       var active = drivers.filter(function(d){ return d.trips_today>0; });
-      var rows = drivers.slice(0,12).map(function(d,i) {
+      if (drivers.length === 0) {
+        html += '<div style="padding:20px;text-align:center;color:var(--ink3);font-size:12px;background:var(--card);border:1px solid var(--border);border-radius:var(--rl)">No drivers for this service</div>';
+        return;
+      }
+      var rows = drivers.map(function(d,i) {
         var ml = mktLabel(d);
         return '<tr style="'+(i%2===0?'':'background:var(--surface)')+'">'
-          +TD('<div style="font-size:12px;font-weight:600;min-width:140px;word-break:break-word">'+d.name+'</div>'
+          +TD('<div style="font-size:12px;font-weight:600;word-break:break-word">'+d.name+'</div>'
             +'<div style="font-size:10px;color:var(--ink3)">'+d.days_active+'d'+(d.avg_rating>0?' \u00b7 \u2b50'+d.avg_rating:'')+'</div>')
           +TDC(lcBadge(d.lifecycle))
           +TDR(d.trips_today)
@@ -2647,18 +2677,13 @@ function buildFleet() {
           +TDC('<span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:10px;background:'+ml.bg+';color:'+ml.c+'">'+ml.l+'</span>')
           +'</tr>';
       }).join('');
-      var more = drivers.length>12?'<tr><td colspan="7" style="padding:6px 10px;text-align:center;font-size:10px;color:var(--ink3);border-bottom:1px solid var(--border)">+'+(drivers.length-12)+' more</td></tr>':'';
-      html += '<div style="margin-bottom:12px">'
-        +'<div style="font-size:11px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:6px">'
-        +'<span>'+s.icon+' '+s.label+'</span>'
-        +'<span style="font-size:10px;color:var(--ink3);font-weight:400">'+active.length+' active today</span>'
-        +'</div>'
+      html += '<div style="font-size:11px;color:var(--ink3);margin-bottom:6px">'+active.length+' active today \u00b7 '+drivers.length+' total</div>'
         +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:auto">'
         +'<table style="width:100%;border-collapse:collapse;table-layout:fixed;">'
         +'<colgroup><col style="width:25%"><col style="width:12%"><col style="width:8%"><col style="width:15%"><col style="width:15%"><col style="width:10%"><col style="width:15%"></colgroup>'
         +'<thead><tr><th '+TH+'>Driver</th><th '+THC+'>Lifecycle</th><th '+THR+'>Trips</th><th '+THR+'>GTV Today</th><th '+THR+'>Commission</th><th '+THR+'>MTD Trips</th><th '+THC+'>Activity</th></tr></thead>'
-        +'<tbody>'+rows+more+'</tbody></table></div></div>';
-    });
+        +'<tbody>'+rows+'</tbody></table></div>';
+    })();
 
     // ── 5. Driver Directory ───────────────────────────────────────────────────
     html += '<div style="font-size:13px;font-weight:700;margin:16px 0 10px;padding:8px 12px;background:var(--surface);border-radius:var(--r);border-left:3px solid var(--accent)">Driver Directory</div>';
@@ -2699,25 +2724,15 @@ function buildFleet() {
   })();
 }
 
-function setFleetFilter(f, el) {
-  FLEET_FILTER_KEY = f;
-  document.querySelectorAll('.fpill[id^="fp-"]').forEach(b => b.classList.remove('on'));
-  if (el) el.classList.add('on');
-  renderFleetGrid();
-}
 
 let SORT = { fleet: { col: 'rph', dir: 'desc' }, assets: { col: 'rev', dir: 'desc' } };
 
 function setFleetSort(col) {
   if (SORT.fleet.col === col) SORT.fleet.dir = SORT.fleet.dir === 'desc' ? 'asc' : 'desc';
   else { SORT.fleet.col = col; SORT.fleet.dir = 'desc'; }
-  renderFleetGrid();
+  buildFleet();
 }
 
-function filterFleet() {
-  FLEET_SEARCH = document.getElementById('fleet-search')?.value.toLowerCase() || '';
-  renderFleetGrid();
-}
 
 
 // ─── DRIVER DRAWER ────────────────────────────────────────────────────────────
@@ -3898,7 +3913,7 @@ const _exp = {
   buildFinance, finTab, finToggleBase, finShowCyclePicker, finOpenPayslip, finExportCSV, finPrintPayslip,
   buildSimulator, simSelectDriver, setFleetSort, _confirmRemoveFromPod, _doDeleteTemplate,
   closeModal, openDrawer, closeDrawer, updateAlertStrip, dismissAlert, updateTopbar, updateAgeBadge, doRefresh,
-  buildCmd, buildFleet, setFleetFilter, filterFleet, renderFleetGrid, openDriverDrawer, buildAssets, setAssetFilter,
+  buildCmd, buildFleet, openDriverDrawer, buildAssets, setAssetFilter,
   filterAssets2, renderAssetGrid2, hasComplianceAlert, openAssetDrawer, renderAssetDrawerContent, switchAssetDrawerTab, showNewAsset, showReportCrash,
   reportCrashFromAsset, showNewShift, showEditAsset, showHandover, showNewPodWizard, downloadFleetCSV2, schedRunAutoAssign, schedUpdateQualityPill,
   goSchedTab, buildSchedule, onSchedDateChange, setSchedFilter, schedRenderBoard, schedOpenAP, schedRefreshAP, schedQuickAssign,
@@ -3949,149 +3964,20 @@ function toggleView(section) {
   VIEW_MODE[section] = VIEW_MODE[section] === 'card' ? 'list' : 'card';
   const btn = document.getElementById('view-toggle-' + section);
   if (btn) btn.textContent = VIEW_MODE[section] === 'card' ? '☰ List' : '⊞ Cards';
-  if (section === 'fleet') renderFleetGrid();
+  if (section === 'fleet') buildFleet();
   else if (section === 'assets') renderAssetGrid2();
 }
 
 function sortToggle(section, col) {
   if (SORT[section].col === col) SORT[section].dir = SORT[section].dir === 'asc' ? 'desc' : 'asc';
   else { SORT[section].col = col; SORT[section].dir = 'desc'; }
-  if (section === 'fleet') renderFleetGrid();
+  if (section === 'fleet') buildFleet();
   else if (section === 'assets') renderAssetGrid2();
 }
 
 function _sortArrow(section, col) {
   if (SORT[section].col !== col) return '<span style="color:var(--ink3);opacity:.4">↕</span>';
   return SORT[section].dir === 'asc' ? '↑' : '↓';
-}
-
-// ─── FLEET: ENHANCED RENDER WITH LIST VIEW + SORT ─────────────────────────────
-function renderFleetGrid() {
-  const grid = document.getElementById('fleet-grid');
-  const sub = document.getElementById('fleet-sub');
-  if (!grid) return;
-
-  let drivers = [...D4W];
-  const search = document.getElementById('fleet-search')?.value.toLowerCase() || '';
-  if (search) drivers = drivers.filter(d => d.name.toLowerCase().includes(search) || (d.id || '').includes(search));
-  if (FLEET_FILTER_KEY !== 'all') {
-    drivers = drivers.filter(d => {
-      const tier = gTier(d).toLowerCase().replace(/ /g, '-');
-      if (FLEET_FILTER_KEY === 'risk') return tier === 'bench' || d.csat < 4.2;
-      return tier === FLEET_FILTER_KEY;
-    });
-  }
-
-  // Sort
-  const s = SORT.fleet;
-  drivers.sort((a, b) => {
-    let va, vb;
-    if (s.col === 'name') { va = a.name; vb = b.name; }
-    else if (s.col === 'csat') { va = a.csat || 0; vb = b.csat || 0; }
-    else if (s.col === 'rph') { va = a.rph || 0; vb = b.rph || 0; }
-    else if (s.col === 'att') { va = a.att || 0; vb = b.att || 0; }
-    else if (s.col === 'days') { va = a.days || 0; vb = b.days || 0; }
-    else if (s.col === 'tier') { va = gTier(a); vb = gTier(b); }
-    else { va = a.rph || 0; vb = b.rph || 0; }
-    if (typeof va === 'string') return s.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
-    return s.dir === 'asc' ? va - vb : vb - va;
-  });
-
-  const cnt = document.getElementById('fleet-count');
-  if (cnt) cnt.textContent = drivers.length + ' drivers';
-  if (sub) sub.textContent = D4W.length + ' total · ' + D4W.filter(d => gTier(d) === 'champion').length + ' champions · ' + D4W.filter(d => gTier(d) === 'bench').length + ' bench';
-
-  const TIER_COLORS = { champion: '#7C3AED', pro: '#0066FF', active: '#059669', standard: '#D97706', bench: '#94A3B8', 'below-threshold': '#94A3B8' };
-  const AVATAR_COLORS = ['#0066FF','#059669','#D97706','#7C3AED','#DB2777','#0891B2'];
-
-  if (!drivers.length) {
-    grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">👥</div><div class="empty-title">No drivers match</div></div>';
-    return;
-  }
-
-  if (VIEW_MODE.fleet === 'list') {
-    const sa = (col) => `onclick="sortToggle('fleet','${col}')" style="cursor:pointer;user-select:none"`;
-    grid.style.display = 'block';
-    grid.innerHTML = `<div style="border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">
-      <div style="max-height:calc(100vh - 260px);overflow-y:auto">
-      <table class="tbl" style="width:100%">
-        <thead><tr style="position:sticky;top:0;z-index:1">
-          <th ${sa('name')}>Driver ${_sortArrow('fleet','name')}</th>
-          <th ${sa('tier')}>Tier ${_sortArrow('fleet','tier')}</th>
-          <th ${sa('csat')} style="text-align:center">CSAT ${_sortArrow('fleet','csat')}</th>
-          <th ${sa('rph')} style="text-align:right">Rev/Hr ${_sortArrow('fleet','rph')}</th>
-          <th ${sa('att')} style="text-align:center">Attend ${_sortArrow('fleet','att')}</th>
-          <th ${sa('days')} style="text-align:center">Days ${_sortArrow('fleet','days')}</th>
-          <th>Shift</th>
-          <th style="text-align:right">Est. Today</th>
-          <th></th>
-        </tr></thead>
-        <tbody>
-        ${drivers.map(d => {
-          const tier = gTier(d);
-          const tcls = 'tier-' + tier.toLowerCase().replace(/ /g, '-').replace(/_/g, '-');
-          const estToday = Math.round((d.rph || 0) * 8.5);
-          const tgt = FLEET_SETTINGS.dailyTarget;
-          const pct = Math.min(100, Math.round(estToday / tgt * 100));
-          const barCol = pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--amber)' : 'var(--red)';
-          return `<tr onclick="openDriverDrawer('${d.id}')" style="cursor:pointer">
-            <td>
-              <div style="font-weight:600;font-size:12px">${d.name}</div>
-              <div style="font-size:9px;color:var(--ink3)">${d.depot || ''}</div>
-            </td>
-            <td><span class="badge ${tcls}">${tier}</span></td>
-            <td style="text-align:center;font-family:var(--f-mono);font-weight:700;color:${(d.csat||0)>=4.6?'var(--green)':(d.csat||0)>=4.2?'var(--ink)':'var(--red)'}">${(d.csat||0).toFixed(2)}</td>
-            <td style="text-align:right;font-family:var(--f-mono);font-weight:700">₱${(d.rph||0).toFixed(0)}</td>
-            <td style="text-align:center;color:${(d.att||0)>=90?'var(--green)':'var(--red)'};font-weight:600">${d.att||0}%</td>
-            <td style="text-align:center;color:var(--ink3)">${d.days||0}</td>
-            <td style="font-size:10px;color:var(--ink2)">${d.shift||'Sh.2'}</td>
-            <td style="text-align:right">
-              <div style="font-family:var(--f-mono);font-size:11px;font-weight:700;color:${barCol}">${fP(estToday)}</div>
-              <div style="height:2px;background:var(--border);border-radius:1px;width:60px;margin-left:auto;margin-top:3px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${barCol}"></div></div>
-            </td>
-            <td style="text-align:right">
-              <button class="btn btn-s btn-xs" onclick="event.stopPropagation();openTierModal('${d.id}')">Tier</button>
-            </td>
-          </tr>`;
-        }).join('')}
-        </tbody>
-      </table></div>
-    </div>`;
-  } else {
-    grid.style.display = '';
-    grid.innerHTML = drivers.map((d, i) => {
-      const tier = gTier(d);
-      const tcls = 'tier-' + tier.toLowerCase().replace(/ /g, '-').replace(/_/g, '-');
-      const accentCol = TIER_COLORS[tier.toLowerCase().replace(/ /g, '-')] || '#94A3B8';
-      const avatarCol = AVATAR_COLORS[i % AVATAR_COLORS.length];
-      const initials = d.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-      const estToday = Math.round((d.rph || 0) * 8.5);
-      const pct = Math.min(100, Math.round(estToday / FLEET_SETTINGS.dailyTarget * 100));
-      const barCol = pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--amber)' : 'var(--red)';
-      return `<div class="dcard" onclick="openDriverDrawer('${d.id}')">
-        <div class="dcard-accent" style="background:${accentCol}"></div>
-        <div class="dcard-header">
-          <div class="dcard-avatar" style="background:${avatarCol}">${initials}</div>
-          <div style="flex:1"><div class="dcard-name">${d.name}</div><div class="dcard-meta">${d.shift||'Shift 2'} · ${d.depot||'Cubao'}</div></div>
-          <span class="badge ${tcls}">${tier}</span>
-        </div>
-        <div class="dcard-kpis">
-          <div><div class="dkpi-label">CSAT</div><div class="dkpi-val" style="color:${(d.csat||0)>=4.6?'var(--green)':(d.csat||0)>=4.2?'var(--ink)':'var(--red)'}">${(d.csat||0).toFixed(1)}</div></div>
-          <div><div class="dkpi-label">Rev/Hr</div><div class="dkpi-val">₱${(d.rph||0).toFixed(0)}</div></div>
-          <div><div class="dkpi-label">Attend</div><div class="dkpi-val" style="color:${(d.att||0)>=90?'var(--green)':'var(--red)'}">${d.att||0}%</div></div>
-        </div>
-        <div class="rev-bar"><div class="rev-bar-fill" style="width:${pct}%;background:${barCol}"></div></div>
-        <div style="display:flex;justify-content:space-between;margin-top:5px">
-          <div style="font-size:9px;color:var(--ink3)">Est. today</div>
-          <div style="font-size:10px;font-weight:700;font-family:var(--f-mono);color:${barCol}">${fP(estToday)} · ${pct}%</div>
-        </div>
-        <div class="dcard-actions">
-          <button class="btn btn-s btn-xs" onclick="event.stopPropagation();openDriverDrawer('${d.id}')">Profile</button>
-          <button class="btn btn-s btn-xs" onclick="event.stopPropagation();openTierModal('${d.id}')">Tier ↑↓</button>
-        </div>
-      </div>`;
-    }).join('');
-  }
 }
 
 // ─── ASSETS: ENHANCED RENDER WITH LIST VIEW + SORT ────────────────────────────
@@ -4268,7 +4154,7 @@ function saveFleetSettings2() {
   FLEET_SETTINGS.penaltyCap = parseInt(document.getElementById('fs-pcap')?.value) || 30;
   saveFSets(); closeModal();
   toast('Fleet settings saved ✓');
-  if (CUR_S === 'fleet') renderFleetGrid();
+  if (CUR_S === 'fleet') buildFleet();
   if (CUR_S === 'cmd') buildCmd();
 }
 
@@ -4336,7 +4222,7 @@ function setDriverTier(driverId, newTier) {
   dxpSyncTierOverride(driverId, newTier, oldTier, reason);
   closeModal();
   toast(`${d.name} moved ${oldTier} → ${newTier} ✓`);
-  if (CUR_S === 'fleet') renderFleetGrid();
+  if (CUR_S === 'fleet') buildFleet();
   if (DRAWER_CTX?.id === driverId) openDriverDrawer(driverId);
 }
 
