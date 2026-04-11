@@ -949,7 +949,7 @@ function dbRefreshAll() {
   DB_LOADING = true;
   updateStaleIndicator(true);
 
-  var _pending = 7 + (ACTIVE_TAB === 'fleet' ? 1 : 0);
+  var _pending = 7;
   var _anyData = false;
   function _done(gotData) {
     if (gotData) _anyData = true;
@@ -963,7 +963,7 @@ function dbRefreshAll() {
 
   setTimeout(function() {
     if (DB_LOADING) { DB_LOADING = false; updateStaleIndicator(false); toast('Refresh timed out'); }
-  }, 35000);
+  }, 45000);
 
   dbCall('today_overview', function(data, today) {
     if (data) { DB_TODAY = data; DB_DATA_DATE = today; if (data.snapshot_time) DB_SNAPSHOT_TIME = data.snapshot_time;
