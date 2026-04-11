@@ -3107,15 +3107,7 @@ function buildAssets() {
           +'</div>';
       }).join('')
       +'</div>'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-      +'<div style="font-size:13px;font-weight:700">Asset performance <span style="font-size:10px;color:var(--ink3);font-weight:400">grouped by state \u00b7 worst first</span></div>'
-      +'<div style="font-size:11px;color:var(--ink3)">daily target '+fP(tgt)+' \u00b7 monthly '+fP(mTgt)+'</div>'
-      +'</div>'
-      +assetGroup(idle, 'Idle \u2014 no revenue', '#EF4444', 'rgba(239,68,68,.08)', true)
-      +assetGroup(underperform, 'Underperforming \u2014 below 60%', '#F59E0B', 'rgba(245,158,11,.08)', true)
-      +assetGroup(onTrack, 'On track \u2014 60\u201399%', '#60A5FA', 'rgba(96,165,250,.08)', false)
-      +assetGroup(above, 'Above target \u2014 100%+', '#34D399', 'rgba(52,211,153,.08)', false)
-      +'<div style="font-size:13px;font-weight:700;margin-top:20px;margin-bottom:10px">Unit economics \u00b7 today</div>'
+      +'<div style="font-size:13px;font-weight:700;margin-bottom:10px">Unit economics \u00b7 today</div>'
       +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'
       +'<div class="card" style="padding:16px 18px">'
       +'<div style="font-size:11px;font-weight:700;color:var(--ink3);margin-bottom:12px;text-transform:uppercase;letter-spacing:.05em">Fleet avg revenue</div>'
@@ -3165,6 +3157,14 @@ function buildAssets() {
       }).join('')
       +'</div>'
       +'</div>'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 10px">'
+      +'<div style="font-size:13px;font-weight:700">Asset performance <span style="font-size:10px;color:var(--ink3);font-weight:400">grouped by state \u00b7 worst first</span></div>'
+      +'<div style="font-size:11px;color:var(--ink3)">daily target '+fP(tgt)+' \u00b7 monthly '+fP(mTgt)+'</div>'
+      +'</div>'
+      +assetGroup(idle, 'Idle \u2014 no revenue', '#EF4444', 'rgba(239,68,68,.08)', true)
+      +assetGroup(underperform, 'Underperforming \u2014 below 60%', '#F59E0B', 'rgba(245,158,11,.08)', true)
+      +assetGroup(onTrack, 'On track \u2014 60\u201399%', '#60A5FA', 'rgba(96,165,250,.08)', false)
+      +assetGroup(above, 'Above target \u2014 100%+', '#34D399', 'rgba(52,211,153,.08)', false)
       +'</div>';
   }
 
