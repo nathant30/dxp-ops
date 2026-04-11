@@ -1646,7 +1646,7 @@ function buildCmd() {
     var totCompPct = totDemand > 0 ? Math.round(totTrips/totDemand*100) : 0;
     var compCol = totCompPct>=90?'#34D399':totCompPct>=75?'#FCD34D':'#F87171';
     var _allTarget = ASSETS.reduce(function(s,a){ return s+getAssetTarget(a.asset_id); }, 0);
-    var pct = _allTarget > 0 ? Math.round(totRev / _allTarget * 100) : 0;
+    var allRevPct = _allTarget > 0 ? Math.round(totRev / _allTarget * 100) : 0;
 
     function svcRow(id, icon, label, val, col) {
       return '<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.06)">'
@@ -1703,7 +1703,7 @@ function buildCmd() {
           </div>
           <div style="display:flex;justify-content:space-between;font-size:11px">
             <span style="color:rgba(255,255,255,.4)">Daily target</span>
-            <span style="color:${pct>=100?'#34D399':'rgba(255,255,255,.7)'}">${pct}% ${pct>=100?'✓':''}</span>
+            <span style="color:${allRevPct>=100?'#34D399':'rgba(255,255,255,.7)'}">${allRevPct}% ${allRevPct>=100?'✓':''}</span>
           </div>
         </div>
       </div>
