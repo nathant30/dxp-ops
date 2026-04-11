@@ -2617,7 +2617,7 @@ function buildFleet() {
           +TDC(lcBadge(d.lifecycle))
           +TDR(d.trips_today)
           +TDR(fP(d.rev_today),'font-size:12px;font-weight:700;color:'+barCol)
-          +(function(){var rph=d.rev_per_shift_hr||0;var shiftHrs=d.shift_hrs_today||0;return TDR(rph>0?'₱'+rph.toLocaleString()+'/hr <span style="font-size:9px;color:var(--ink3)">('+shiftHrs.toFixed(1)+'h elapsed)</span>':'<span style="color:var(--ink3)">—</span>','color:var(--ink2)')})()
+          +(function(){var STANDARD_SHIFT_HRS=9;var elapsed=d.shift_hrs_today||0;var pace=elapsed>0?Math.round(d.rev_today/elapsed):0;var projected=pace>0?Math.round(pace*STANDARD_SHIFT_HRS):0;var tgt=3000;var onTrack=projected>=tgt;var paceCol=onTrack?'var(--green)':pace>0&&projected>=tgt*0.8?'var(--amber)':'var(--red)';var rphCell=elapsed>0?'<div style="white-space:nowrap"><span style="font-weight:700;color:'+paceCol+'">₱'+pace.toLocaleString()+'/hr</span></div>'+'<div style="font-size:9px;color:var(--ink3);white-space:nowrap">→ ₱'+projected.toLocaleString()+' proj · '+elapsed.toFixed(1)+'h elapsed</div>':'<span style="color:var(--ink3)">—</span>';return TDR(rphCell,'vertical-align:middle')})()
           +TD(bar)
           +TDC('<span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;background:'+seg.bg+';color:'+seg.col+'">'+seg.statusLabel+'</span>')
           +'</tr>';
@@ -2628,7 +2628,7 @@ function buildFleet() {
         +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:auto">'
         +'<table style="width:100%;border-collapse:collapse;table-layout:fixed;">'
         +'<colgroup><col style="width:25%"><col style="width:12%"><col style="width:8%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:10%"></colgroup>'
-        +'<thead><tr><th '+TH+'>Driver</th><th '+THC+'>Lifecycle</th><th '+THR+'>Trips</th><th '+THR+'>Rev Today</th><th '+THR+'>Rev/Shift Hr</th><th '+TH+'>Target</th><th '+THC+'>Status</th></tr></thead>'
+        +'<thead><tr><th '+TH+'>Driver</th><th '+THC+'>Lifecycle</th><th '+THR+'>Trips</th><th '+THR+'>Rev Today</th><th '+THR+'>Pace &amp; Projection</th><th '+TH+'>Target</th><th '+THC+'>Status</th></tr></thead>'
         +'<tbody>'+rows+more+'</tbody></table></div></div>';
     });
 
