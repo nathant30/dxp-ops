@@ -2533,7 +2533,7 @@ function buildFleet() {
   }
 
   el.innerHTML = (function() {
-    var html = '';
+    var html = '<div style="max-width:1400px;overflow-x:auto">';
 
     // Supply Health Summary
     var summaryCards = ['16','1','2','3','10'].map(function(vtid) {
@@ -2564,7 +2564,7 @@ function buildFleet() {
     }).join('');
 
     html += '<div style="padding:var(--s4) var(--s4) 0">'
-      +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">'+summaryCards+'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:16px">'+summaryCards+'</div>'
       +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:10px 16px;margin-bottom:16px;display:flex;gap:24px;align-items:center">'
       +'<span style="font-size:11px;font-weight:700;color:var(--ink2)">Supply health</span>'
       +'<span style="font-size:11px;color:#34D399">'+taxiTop.length+' taxi on target</span>'
@@ -2586,13 +2586,13 @@ function buildFleet() {
       var rows = seg.drivers.slice(0,15).map(function(d) {
         var pct = Math.min(100, Math.round(d.rev_today/tgt*100));
         var barCol = pct>=100?'#34D399':pct>=60?'#60A5FA':'#F59E0B';
-        return '<div style="display:grid;grid-template-columns:1fr 60px 70px 80px 80px 70px 70px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center">'
-          +'<div><div style="font-size:12px;font-weight:600">'+d.name+'</div>'
+        return '<div style="display:grid;grid-template-columns:1.5fr 70px 60px 100px 90px 80px 60px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center">'
+          +'<div style="min-width:120px;word-break:break-word"><div style="font-size:12px;font-weight:600">'+d.name+'</div>'
           +'<div style="font-size:10px;color:var(--ink3)">'+d.days_active+'d active \u00b7 \u20b1'+d.avg_fare+' avg fare</div></div>'
           +lcBadge(d.lifecycle)
           +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right">'+d.trips_today+'</div>'
-          +'<div style="font-family:var(--f-mono);font-size:12px;font-weight:700;text-align:right;color:'+barCol+'">'+fP(d.rev_today)+'</div>'
-          +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right;color:var(--ink2)">'+(d.rev_per_util_hr>0?fP(d.rev_per_util_hr)+'/hr':'—')+'</div>'
+          +'<div style="font-family:var(--f-mono);font-size:12px;font-weight:700;text-align:right;color:'+barCol+';white-space:nowrap">'+fP(d.rev_today)+'</div>'
+          +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right;color:var(--ink2);white-space:nowrap">'+(d.rev_per_util_hr>0?fP(d.rev_per_util_hr)+'/hr':'—')+'</div>'
           +'<div style="display:flex;align-items:center;gap:4px">'
           +'<div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+barCol+';border-radius:2px"></div></div>'
           +'<span style="font-size:9px;color:var(--ink3);min-width:26px;text-align:right">'+pct+'%</span>'
@@ -2604,8 +2604,8 @@ function buildFleet() {
       return '<div style="margin-bottom:10px">'
         +'<div style="font-size:9px;font-weight:700;color:'+seg.col+';text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;padding:4px 10px;background:'+seg.bg+';border-radius:6px;display:inline-block">'+seg.label+' \u00b7 '+seg.drivers.length+'</div>'
         +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
-        +'<div style="display:grid;grid-template-columns:1fr 60px 70px 80px 80px 70px 70px;gap:6px;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase">'
-        +'<span>Driver</span><span>Lifecycle</span><span style="text-align:right">Trips</span><span style="text-align:right">Rev today</span><span style="text-align:right">Rev/util hr</span><span style="text-align:right">Target</span><span style="text-align:center">Status</span>'
+        +'<div style="display:grid;grid-template-columns:1.5fr 70px 60px 100px 90px 80px 60px;gap:6px;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase">'
+        +'<span>Driver</span><span>Lifecycle</span><span style="text-align:right">Trips</span><span style="text-align:right;white-space:nowrap">Rev today</span><span style="text-align:right;white-space:nowrap">Rev/util hr</span><span style="text-align:right">Target</span><span style="text-align:center">Status</span>'
         +'</div>'+rows+more+'</div></div>';
     }).join('');
 
@@ -2623,13 +2623,13 @@ function buildFleet() {
       var active = drivers.filter(function(d){ return d.trips_today>0; });
       var rows = drivers.slice(0,12).map(function(d,i) {
         var ml = mktLabel(d);
-        return '<div style="display:grid;grid-template-columns:1fr 60px 70px 80px 80px 70px 80px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center;'+(i%2===0?'':'background:var(--surface)')+'">'
-          +'<div><div style="font-size:12px;font-weight:600">'+d.name+'</div>'
+        return '<div style="display:grid;grid-template-columns:1.5fr 70px 55px 90px 85px 65px 75px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center;'+(i%2===0?'':'background:var(--surface)')+'">'
+          +'<div style="min-width:120px;word-break:break-word"><div style="font-size:12px;font-weight:600">'+d.name+'</div>'
           +'<div style="font-size:10px;color:var(--ink3)">'+d.days_active+'d active'+(d.avg_rating>0?' \u00b7 \u2b50'+d.avg_rating:'')+'</div></div>'
           +lcBadge(d.lifecycle)
           +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right">'+d.trips_today+'</div>'
-          +'<div style="font-family:var(--f-mono);font-size:12px;font-weight:700;text-align:right">'+fP(d.rev_today)+'</div>'
-          +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right;color:#34D399">'+fP(d.commission_today)+'</div>'
+          +'<div style="font-family:var(--f-mono);font-size:12px;font-weight:700;text-align:right;white-space:nowrap">'+fP(d.rev_today)+'</div>'
+          +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right;color:#34D399;white-space:nowrap">'+fP(d.commission_today)+'</div>'
           +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right;color:var(--ink3)">'+d.trips_mtd+'</div>'
           +'<div style="text-align:center"><span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:10px;background:'+ml.bg+';color:'+ml.c+'">'+ml.l+'</span></div>'
           +'</div>';
@@ -2641,8 +2641,8 @@ function buildFleet() {
         +'<span style="font-size:10px;color:var(--ink3);font-weight:400">'+active.length+' active today</span>'
         +'</div>'
         +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
-        +'<div style="display:grid;grid-template-columns:1fr 60px 70px 80px 80px 70px 80px;gap:6px;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase">'
-        +'<span>Driver</span><span>Lifecycle</span><span style="text-align:right">Trips</span><span style="text-align:right">GTV today</span><span style="text-align:right">Commission</span><span style="text-align:right">MTD trips</span><span style="text-align:center">Activity</span>'
+        +'<div style="display:grid;grid-template-columns:1.5fr 70px 55px 90px 85px 65px 75px;gap:6px;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase">'
+        +'<span>Driver</span><span>Lifecycle</span><span style="text-align:right">Trips</span><span style="text-align:right;white-space:nowrap">GTV today</span><span style="text-align:right;white-space:nowrap">Commission</span><span style="text-align:right;white-space:nowrap">MTD trips</span><span style="text-align:center">Activity</span>'
         +'</div>'+rows+more+'</div></div>';
     }).join('');
 
@@ -2686,6 +2686,7 @@ function buildFleet() {
       +'<div style="font-size:11px;color:var(--ink3)">'+DB_FLEET_HEALTH.length+' total drivers</div>'
       +'</div>'+dirContent+'</div>';
 
+    html += '</div>';
     return html;
   })();
 }
