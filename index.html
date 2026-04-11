@@ -1102,12 +1102,13 @@ function dbRefreshAll() {
             commission_today:Number(r.commission_today || 0),
             trips_mtd:       Number(r.trips_mtd || 0),
             rev_mtd:         Number(r.rev_mtd || 0),
-            utilized_hrs:    Number(r.utilized_hrs_today || 0),
-            avg_fare:        Number(r.avg_fare_today || 0),
-            incentives_mtd:  Number(r.incentives_mtd || 0),
-            avg_rating:      Number(r.avg_rating || 0),
-            rev_per_util_hr: Number(r.utilized_hrs_today) > 0
-              ? Math.round(Number(r.rev_today) / Number(r.utilized_hrs_today)) : 0,
+            shift_hrs_today:   Number(r.shift_hrs_today   || 0),
+            in_trip_hrs_today: Number(r.in_trip_hrs_today  || 0),
+            avg_fare:          Number(r.avg_fare_today || 0),
+            incentives_mtd:    Number(r.incentives_mtd || 0),
+            avg_rating:        Number(r.avg_rating || 0),
+            rev_per_shift_hr:  Number(r.shift_hrs_today) > 0
+              ? Math.round(Number(r.rev_today) / Number(r.shift_hrs_today)) : 0,
           };
         });
       }
@@ -2473,7 +2474,7 @@ function buildFleet() {
     dbCall('fleet_supply_health', function(data) {
       if (data && data.length) {
         DB_FLEET_HEALTH = data.map(function(r) {
-          return { vtid:String(r.vehicle_type_id||''), id:String(r.driver_id||''), name:String(r.driver_name||'Driver'), lifecycle:String(r.lifecycle||'Unknown'), days_active:Number(r.days_since_activation||0), trips_today:Number(r.trips_today||0), rev_today:Number(r.rev_today||0), commission_today:Number(r.commission_today||0), trips_mtd:Number(r.trips_mtd||0), rev_mtd:Number(r.rev_mtd||0), utilized_hrs:Number(r.utilized_hrs_today||0), avg_fare:Number(r.avg_fare_today||0), incentives_mtd:Number(r.incentives_mtd||0), avg_rating:Number(r.avg_rating||0), rev_per_util_hr:Number(r.utilized_hrs_today)>0?Math.round(Number(r.rev_today)/Number(r.utilized_hrs_today)):0 };
+          return { vtid:String(r.vehicle_type_id||''), id:String(r.driver_id||''), name:String(r.driver_name||'Driver'), lifecycle:String(r.lifecycle||'Unknown'), days_active:Number(r.days_since_activation||0), trips_today:Number(r.trips_today||0), rev_today:Number(r.rev_today||0), commission_today:Number(r.commission_today||0), trips_mtd:Number(r.trips_mtd||0), rev_mtd:Number(r.rev_mtd||0), shift_hrs_today:Number(r.shift_hrs_today||0), in_trip_hrs_today:Number(r.in_trip_hrs_today||0), avg_fare:Number(r.avg_fare_today||0), incentives_mtd:Number(r.incentives_mtd||0), avg_rating:Number(r.avg_rating||0), rev_per_shift_hr:Number(r.shift_hrs_today)>0?Math.round(Number(r.rev_today)/Number(r.shift_hrs_today)):0 };
         });
       }
       buildFleet();
@@ -2616,7 +2617,7 @@ function buildFleet() {
           +TDC(lcBadge(d.lifecycle))
           +TDR(d.trips_today)
           +TDR(fP(d.rev_today),'font-size:12px;font-weight:700;color:'+barCol)
-          +TDR(d.rev_per_util_hr>0?fP(d.rev_per_util_hr)+'/hr':'—','color:var(--ink2)')
+          +(function(){var rph=d.rev_per_shift_hr||0;var shiftHrs=d.shift_hrs_today||0;return TDR(rph>0?'₱'+rph.toLocaleString()+'/hr <span style="font-size:9px;color:var(--ink3)">('+shiftHrs.toFixed(1)+'h elapsed)</span>':'<span style="color:var(--ink3)">—</span>','color:var(--ink2)')})()
           +TD(bar)
           +TDC('<span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;background:'+seg.bg+';color:'+seg.col+'">'+seg.statusLabel+'</span>')
           +'</tr>';
@@ -2627,7 +2628,7 @@ function buildFleet() {
         +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:auto">'
         +'<table style="width:100%;border-collapse:collapse;table-layout:fixed;">'
         +'<colgroup><col style="width:25%"><col style="width:12%"><col style="width:8%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:10%"></colgroup>'
-        +'<thead><tr><th '+TH+'>Driver</th><th '+THC+'>Lifecycle</th><th '+THR+'>Trips</th><th '+THR+'>Rev Today</th><th '+THR+'>Rev/Util Hr</th><th '+TH+'>Target</th><th '+THC+'>Status</th></tr></thead>'
+        +'<thead><tr><th '+TH+'>Driver</th><th '+THC+'>Lifecycle</th><th '+THR+'>Trips</th><th '+THR+'>Rev Today</th><th '+THR+'>Rev/Shift Hr</th><th '+TH+'>Target</th><th '+THC+'>Status</th></tr></thead>'
         +'<tbody>'+rows+more+'</tbody></table></div></div>';
     });
 
