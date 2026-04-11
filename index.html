@@ -1708,6 +1708,37 @@ function buildCmd() {
       vehicleMap[s.asset_id].total += s.gross_revenue || 0;
     });
 
+    if (!('ALL_SELECTED_SVC' in window)) window.ALL_SELECTED_SVC = null;
+
+    var allSvcDefs = [
+      {id:'16', label:'Taxi',         icon:'🚖', commission:false, svc:'taxi'},
+      {id:'1',  label:'Moto Regular', icon:'🛵', commission:true,  svc:'moto-regular'},
+      {id:'2',  label:'Go Car',       icon:'🚗', commission:true,  svc:'go-car'},
+      {id:'3',  label:'Go SUV',       icon:'🚙', commission:true,  svc:'go-suv'},
+    ];
+    var stripHtml = (function(){
+      var backBtn = window.ALL_SELECTED_SVC !== null
+        ? '<div style="padding:0 0 10px"><button onclick="window.ALL_SELECTED_SVC=null;buildCmd();" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:11px;color:var(--ink2);cursor:pointer">← Back to overview</button></div>'
+        : '';
+      var cards = allSvcDefs.map(function(s){
+        var row = _svcRows.find(function(r){return r.vtid===s.id;}) || {trips:0,revenue:0,gtv:0,drivers:0};
+        var isSel = window.ALL_SELECTED_SVC === s.svc;
+        var borderCol = isSel ? '2px solid #60A5FA' : '1px solid var(--border)';
+        var bgCol = isSel ? 'rgba(96,165,250,.06)' : 'var(--card)';
+        return '<div onclick="window.ALL_SELECTED_SVC=\''+s.svc+'\';buildCmd();" style="background:'+bgCol+';border:'+borderCol+';border-radius:var(--rl);padding:14px 16px;cursor:pointer">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+          +'<div style="display:flex;align-items:center;gap:6px"><span style="font-size:18px">'+s.icon+'</span>'
+          +'<span style="font-size:12px;font-weight:700;color:var(--ink1)">'+s.label+'</span></div>'
+          +(isSel?'<span style="font-size:8px;font-weight:700;color:#60A5FA;text-transform:uppercase;letter-spacing:.05em">Selected</span>':'')
+          +'</div>'
+          +'<div style="font-family:var(--f-mono);font-size:16px;font-weight:700;color:#FCD34D;margin-bottom:2px">₱'+row.revenue.toLocaleString()+'</div>'
+          +'<div style="font-size:10px;color:var(--ink3);margin-bottom:8px">'+row.trips.toLocaleString()+' trips · '+row.drivers+' drivers</div>'
+          +'<div onclick="event.stopPropagation();ACTIVE_SERVICE=\''+s.svc+'\';window.ALL_SELECTED_SVC=null;buildCmd();" style="font-size:10px;color:var(--accent);cursor:pointer">View detail →</div>'
+          +'</div>';
+      }).join('');
+      return '<div style="padding:0 var(--s4) 0">'+backBtn+'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">'+cards+'</div></div>';
+    })();
+
     el.innerHTML = `<div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:var(--rxl);padding:20px 24px;margin-bottom:var(--s4);border:1px solid rgba(255,255,255,.08)">
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:rgba(255,255,255,.08);border-radius:12px;overflow:hidden">
 
@@ -1815,12 +1846,150 @@ function buildCmd() {
       </div>
 
       </div>
-    </div>`
+    </div>` + stripHtml
     + (function(){
       var shiftColors = { AM1:'#34D399',AM2:'#60A5FA',PM1:'#FBBF24',PM2:'#A78BFA',PM3:'#F87171' };
       var shiftBg     = { AM1:'rgba(52,211,153,.15)',AM2:'rgba(96,165,250,.15)',PM1:'rgba(251,191,36,.15)',PM2:'rgba(167,139,250,.15)',PM3:'rgba(248,113,113,.15)' };
       var vm2 = {};
       ASHIFTS.forEach(function(s){ if(!vm2[s.asset_id]) vm2[s.asset_id]={shifts:[],total:0}; vm2[s.asset_id].shifts.push(s); vm2[s.asset_id].total+=(s.gross_revenue||0); });
+
+      // === SERVICE DRILL-DOWN (ALL_SELECTED_SVC) ===
+      if (window.ALL_SELECTED_SVC !== null) {
+        var selSvc = window.ALL_SELECTED_SVC;
+        var selControlled = selSvc === 'taxi';
+        var selVtidMap = {taxi:'16','moto-regular':'1','go-car':'2','go-suv':'3'};
+        var selVtid = selVtidMap[selSvc];
+        var selSvcData = DB_SERVICES[selVtid]||{};
+
+        var selCol1;
+        if (selControlled) {
+          var rows3 = ASSETS.slice(0,12).map(function(asset){
+            var vd=vm2[asset.asset_id]||{shifts:[],total:0};
+            var tgt=getAssetTarget(asset.asset_id)||3000, total=vd.total;
+            var p3=Math.min(100,Math.round(total/tgt*100));
+            var isAct=vd.shifts.some(function(s){return s.status==='active';});
+            var dotCol=total===0?'var(--ink4)':p3>=80?'#34D399':p3>=50?'#F59E0B':'#EF4444';
+            var barCol=p3>=80?'#34D399':p3>=50?'#F59E0B':'#EF4444';
+            var ms=vd.shifts.length>0?vd.shifts[0]:null;
+            var sc2=ms?ms.shift_code:'—', df=ms&&ms.driver_name?ms.driver_name.split(' ')[0]:'—';
+            var sc=shiftColors[sc2]||'var(--ink4)', sb=shiftBg[sc2]||'var(--surface)';
+            return '<div style="display:grid;grid-template-columns:80px 1fr 52px 80px 70px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center;'+(total===0?'opacity:.45':'')+'">'
+              +'<div style="display:flex;align-items:center;gap:5px"><div style="width:6px;height:6px;border-radius:50%;background:'+dotCol+';flex-shrink:0'+(isAct?';box-shadow:0 0 5px '+dotCol:'')+'"></div>'
+              +'<span style="font-family:var(--f-mono);font-size:10px;font-weight:700">'+asset.plate+'</span></div>'
+              +'<div style="font-size:11px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+df+'</div>'
+              +'<div><span style="font-size:9px;font-weight:600;padding:2px 5px;border-radius:4px;background:'+sb+';color:'+sc+'">'+sc2+'</span></div>'
+              +'<div style="font-family:var(--f-mono);font-size:11px;font-weight:700;color:'+(total>0?'var(--ink1)':'var(--ink4)')+';text-align:right">'+(total>0?fP(total):'—')+'</div>'
+              +'<div style="display:flex;align-items:center;gap:4px"><div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+p3+'%;background:'+barCol+';border-radius:2px"></div></div>'
+              +'<span style="font-size:9px;color:var(--ink3);min-width:22px;text-align:right">'+p3+'%</span></div></div>';
+          }).join('');
+          var more3=ASSETS.length>12?'<div style="padding:8px 12px;font-size:10px;color:var(--ink3);text-align:center">+'+(ASSETS.length-12)+' more vehicles</div>':'';
+          selCol1='<div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+            +'<div style="font-size:14px;font-weight:700">Fleet Vehicles <span style="font-size:11px;color:var(--ink3);font-weight:400">'+activeShifts.length+'/'+ASSETS.length+' active</span></div>'
+            +'<button class="btn btn-s btn-xs" onclick="goS(\'assets\')">View all →</button></div>'
+            +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
+            +'<div style="display:grid;grid-template-columns:80px 1fr 52px 80px 70px;gap:6px;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em">'
+            +'<span>Plate</span><span>Driver</span><span>Shift</span><span style="text-align:right">Rev</span><span style="text-align:right">Target</span>'
+            +'</div>'+rows3+more3+'</div></div>';
+        } else {
+          var rid3=REGISTERED_PARTNERS[selVtid]||0, act3=Number(selSvcData.active_drivers||0);
+          var actP3=rid3>0?Math.round(act3/rid3*100):0;
+          var t3=Number(selSvcData.trips||0), g3=Number(selSvcData.gtv||0), c3=Number(selSvcData.commission||0);
+          var ca3=Number(selSvcData.cancelled||0);
+          var cp3=(t3+ca3)>0?Math.round(t3/(t3+ca3)*100):0;
+          var cc3=cp3>=90?'var(--green)':cp3>=75?'var(--amber)':'var(--red)';
+          var svcLblMap={'moto-regular':'Moto Regular','go-car':'Go Car','go-suv':'Go SUV'};
+          selCol1='<div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+            +'<div style="font-size:14px;font-weight:700">'+svcLblMap[selSvc]+' Partners <span style="font-size:11px;color:var(--ink3);font-weight:400">today</span></div></div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+            +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;text-align:center"><div style="font-size:24px;font-weight:700;color:var(--green)">'+act3+'</div>'
+            +'<div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-top:3px">Active today</div>'
+            +'<div style="font-size:10px;color:var(--ink3);margin-top:4px">of '+rid3+' registered ('+actP3+'%)</div></div>'
+            +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;text-align:center"><div style="font-size:24px;font-weight:700;color:'+cc3+'">'+cp3+'%</div>'
+            +'<div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-top:3px">Completion</div>'
+            +'<div style="font-size:10px;color:var(--ink3);margin-top:4px">'+t3.toLocaleString()+' trips · '+ca3+' cancelled</div></div>'
+            +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--f-mono)">₱'+g3.toLocaleString()+'</div>'
+            +'<div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-top:3px">Platform GTV</div>'
+            +'<div style="font-size:10px;color:var(--ink3);margin-top:4px">₱'+Number(selSvcData.avg_fare||0).toLocaleString()+' avg fare</div></div>'
+            +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--f-mono);color:var(--green)">₱'+c3.toLocaleString()+'</div>'
+            +'<div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-top:3px">Xpress commission</div>'
+            +'<div style="font-size:10px;color:var(--ink3);margin-top:4px">20% of GTV</div></div>'
+            +'</div></div>';
+        }
+
+        var selDpInner = selControlled ? (function(){
+          var secs=[
+            {label:'Top performers', col:'#34D399',bg:'rgba(52,211,153,.08)', drivers:driverSegments.top.slice(0,3),   tag:'Top'},
+            {label:'On track',       col:'#60A5FA',bg:'transparent',          drivers:driverSegments.track.slice(0,3), tag:'Track'},
+            {label:'Needs attention',col:'#F59E0B',bg:'rgba(245,158,11,.05)', drivers:driverSegments.risk.slice(0,2),  tag:'At risk'},
+          ];
+          var r=secs.map(function(seg){
+            if(!seg.drivers.length) return '';
+            return '<div style="padding:6px 12px 2px;font-size:9px;font-weight:700;color:'+seg.col+';text-transform:uppercase;letter-spacing:.05em;background:'+seg.bg+';border-bottom:1px solid var(--border)">'+seg.label+'</div>'
+              +seg.drivers.map(function(d){
+                return '<div class="shift-item" onclick="openDriverDrawer(\''+d.id+'\')">'
+                  +'<div style="flex:1"><div style="font-size:12px;font-weight:600">'+d.name+'</div>'
+                  +'<div style="font-size:10px;color:var(--ink3)">₱'+(d.rph||0)+'/hr · '+(d.att||0)+'% att</div></div>'
+                  +'<span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:12px;background:'+seg.bg+';color:'+seg.col+'">'+seg.tag+'</span>'
+                  +'<div style="font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--green);width:55px;text-align:right">'+fP(d.rpd||0)+'</div></div>';
+              }).join('');
+          }).join('');
+          return r+'<div style="padding:8px 12px;background:var(--surface);border-top:1px solid var(--border);font-size:9px;color:var(--ink3);display:flex;gap:10px">'
+            +'<span style="color:#34D399">'+driverSegments.top.length+' top</span>'
+            +'<span style="color:#60A5FA">'+driverSegments.track.length+' track</span>'
+            +'<span style="color:#F59E0B">'+driverSegments.risk.length+' at risk</span>'
+            +'<span style="color:#EF4444">'+driverSegments.crit.length+' critical</span></div>';
+        })() : (function(){
+          var selMktList=(function(){var sv3=selVtid;return DB_RIDESHARE_PERF.filter(function(d){return d.vtid===sv3;}).slice().sort(function(a,b){return b.gtv-a.gtv;});})();
+          var selMed=selMktList.length>0?selMktList[Math.floor(selMktList.length/2)].gtv:0;
+          var hdr3='<div style="display:grid;grid-template-columns:1fr 70px 80px 70px;padding:7px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em">'
+            +'<span>Driver</span><span style="text-align:right">Trips</span><span style="text-align:right">GTV</span><span style="text-align:right">vs avg</span></div>';
+          var dr3=selMktList.slice(0,10).map(function(d){
+            var va=selMed>0?Math.round((d.gtv-selMed)/selMed*100):0;
+            var vc=va>=20?'#34D399':va>=-10?'var(--ink3)':'#F59E0B';
+            var vl=va>=20?'Above avg':va>=-10?'Near avg':'Below avg';
+            var lb=va>=20?'rgba(52,211,153,.12)':va>=-10?'var(--surface)':'rgba(245,158,11,.12)';
+            return '<div style="display:grid;grid-template-columns:1fr 70px 80px 70px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center">'
+              +'<div><div style="font-size:11px;font-weight:600">'+d.name+'</div>'
+              +'<div style="font-size:9px;color:var(--ink3)">'+d.days+'d active · ₱'+d.avg_fare+' avg fare</div></div>'
+              +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right">'+d.trips+'</div>'
+              +'<div style="font-family:var(--f-mono);font-size:11px;font-weight:600;text-align:right">₱'+d.gtv.toLocaleString()+'</div>'
+              +'<div style="text-align:right"><span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;background:'+lb+';color:'+vc+'">'+vl+'</span></div></div>';
+          }).join('');
+          var mr3=selMktList.length>10?'<div style="padding:8px 12px;text-align:center;font-size:10px;color:var(--ink3)">+'+(selMktList.length-10)+' more partners</div>':'';
+          return hdr3+dr3+mr3;
+        })();
+
+        var selCol2='<div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+          +'<div style="font-size:14px;font-weight:700">Driver Performance</div>'
+          +'<div style="display:flex;gap:4px">'
+          +'<button class="btn btn-s btn-xs" id="dp-top-btn" onclick="showDriverPerf(\'top\')" style="background:var(--accent);color:#fff;border-color:var(--accent)">Top</button>'
+          +'<button class="btn btn-s btn-xs" id="dp-str-btn" onclick="showDriverPerf(\'struggling\')">Struggling</button>'
+          +'</div></div>'
+          +'<div id="driver-perf-panel" style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'+selDpInner+'</div></div>';
+
+        var selAi=allAlerts.length===0
+          ?'<div class="empty" style="padding:20px"><div class="empty-icon">✅</div><div class="empty-title" style="font-size:12px">All clear</div></div>'
+          :allAlerts.slice(0,10).map(function(a){
+            var sv=a.sev==='red'?{bg:'rgba(239,68,68,.06)',br:'#EF4444',co:'#991B1B',ic:'!'}
+                  :a.sev==='amber'?{bg:'rgba(245,158,11,.06)',br:'#F59E0B',co:'#92400E',ic:'~'}
+                  :{bg:'',br:'var(--border)',co:'var(--ink3)',ic:'i'};
+            return '<div style="display:flex;align-items:flex-start;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border);background:'+sv.bg+';border-left:3px solid '+sv.br+'">'
+              +'<div style="width:16px;height:16px;border-radius:50%;background:'+sv.bg+';border:1px solid '+sv.br+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:'+sv.co+';flex-shrink:0;margin-top:1px">'+sv.ic+'</div>'
+              +'<div style="flex:1"><div style="font-size:11px;font-weight:600;color:'+sv.co+'">'+a.msg+'</div>'
+              +'<div style="font-size:9px;color:var(--ink3);margin-top:2px">'+a.cat+'</div></div></div>';
+          }).join('');
+        var selCol3='<div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+          +'<div style="font-size:14px;font-weight:700">Exceptions</div>'
+          +'<div style="display:flex;gap:4px">'
+          +(critAlerts.length?'<span class="badge badge-red">'+critAlerts.length+' critical</span>':'')
+          +(warnAlerts.length?'<span class="badge badge-amber">'+warnAlerts.length+' warning</span>':'')
+          +'</div></div>'
+          +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'+selAi+'</div></div>';
+
+        var selGc = selControlled ? '1.8fr 1.4fr 0.8fr' : '1fr 1.4fr 0.8fr';
+        return '<div style="display:grid;grid-template-columns:'+selGc+';gap:8px;padding:var(--s4)">'+selCol1+selCol2+selCol3+'</div>';
+      }
+      // === END DRILL-DOWN ===
 
       var col1 = (isControlled||isAll) ? (function(){
         var rows = ASSETS.slice(0,12).map(function(asset){
@@ -4067,6 +4236,7 @@ function renderServiceStrip() {
 
 function setActiveService(id) {
   ACTIVE_SERVICE = id;
+  window.ALL_SELECTED_SVC = null;
   renderServiceStrip();
   if (typeof updateTopbar === 'function') { try { updateTopbar(); } catch(e) {} }
   if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} }
