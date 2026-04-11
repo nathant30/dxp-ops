@@ -1621,6 +1621,28 @@ function buildCmd() {
     return;
   }
 
+  const isControlled = ACTIVE_SERVICE === 'taxi';
+  const isMarketplace = ['moto-regular','go-car','go-suv','rideshare'].includes(ACTIVE_SERVICE);
+  const isAll = ACTIVE_SERVICE === 'all';
+
+  const driverSegments = (function() {
+    const sorted = D4W.slice().sort(function(a,b){ return (b.rpd||0)-(a.rpd||0); });
+    const top   = sorted.filter(function(d){ return (d.rpd||0) >= 2500; });
+    const track = sorted.filter(function(d){ return (d.rpd||0) >= 1800 && (d.rpd||0) < 2500; });
+    const risk  = sorted.filter(function(d){ return (d.rpd||0) >= 1200 && (d.rpd||0) < 1800; });
+    const crit  = sorted.filter(function(d){ return (d.rpd||0) > 0    && (d.rpd||0) < 1200; });
+    return { top, track, risk, crit };
+  })();
+
+  const mktDrivers = (function() {
+    var vtidMap = { 'moto-regular':'1', 'go-car':'2', 'go-suv':'3', 'rideshare':null };
+    var vtid = vtidMap[ACTIVE_SERVICE];
+    var list = vtid ? DB_RIDESHARE_PERF.filter(function(d){ return d.vtid===vtid; }) : DB_RIDESHARE_PERF.slice();
+    list = list.slice().sort(function(a,b){ return b.gtv-a.gtv; });
+    var median = list.length > 0 ? list[Math.floor(list.length/2)].gtv : 0;
+    return { list: list, median: median };
+  })();
+
   if (ACTIVE_SERVICE === 'all') {
     var svcDefs = [
       { id: '16', label: 'Taxi',  icon: '🚖', commission: false },
@@ -1794,116 +1816,143 @@ function buildCmd() {
 
       </div>
     </div>`
-    +
-    `
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:var(--s4);padding:var(--s4) 0">
+    + (function(){
+      var shiftColors = { AM1:'#34D399',AM2:'#60A5FA',PM1:'#FBBF24',PM2:'#A78BFA',PM3:'#F87171' };
+      var shiftBg     = { AM1:'rgba(52,211,153,.15)',AM2:'rgba(96,165,250,.15)',PM1:'rgba(251,191,36,.15)',PM2:'rgba(167,139,250,.15)',PM3:'rgba(248,113,113,.15)' };
+      var vm2 = {};
+      ASHIFTS.forEach(function(s){ if(!vm2[s.asset_id]) vm2[s.asset_id]={shifts:[],total:0}; vm2[s.asset_id].shifts.push(s); vm2[s.asset_id].total+=(s.gross_revenue||0); });
 
-      <!-- COL 1: Service Breakdown -->
-      <div>
-        <div style="font-size:14px;font-weight:700;margin-bottom:10px">Service Breakdown</div>
-        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">
-          ${_svcRows.map(svc => {
-            const revPct = _allXpressRev > 0 ? Math.round(svc.revenue / _allXpressRev * 100) : 0;
-            return '<div style="padding:10px 14px;border-bottom:1px solid var(--border)">'
-              + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'
-              + '<span style="font-size:14px">' + svc.icon + '</span>'
-              + '<span style="font-size:12px;font-weight:600;flex:1">' + svc.label + '</span>'
-              + '<span style="font-family:var(--f-mono);font-size:11px;font-weight:700;color:var(--green)">' + (svc.revenue > 0 ? fP(svc.revenue) : '—') + '</span>'
-              + '</div>'
-              + '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:5px">'
-              + '<div style="height:100%;width:' + revPct + '%;background:var(--green);border-radius:2px"></div>'
-              + '</div>'
-              + '<div style="display:flex;gap:10px;font-size:9.5px;color:var(--ink3)">'
-              + '<span>' + svc.trips.toLocaleString() + ' trips</span>'
-              + '<span>' + svc.drivers + ' drivers</span>'
-              + (svc.gtv > svc.revenue && svc.gtv > 0 ? '<span>GTV ' + fP(svc.gtv) + '</span>' : '')
-              + '</div></div>';
-          }).join('')}
-        </div>
-      </div>
+      var col1 = (isControlled||isAll) ? (function(){
+        var rows = ASSETS.slice(0,12).map(function(asset){
+          var vd=vm2[asset.asset_id]||{shifts:[],total:0};
+          var tgt=getAssetTarget(asset.asset_id)||3000, total=vd.total;
+          var p2=Math.min(100,Math.round(total/tgt*100));
+          var isAct=vd.shifts.some(function(s){return s.status==='active';});
+          var dotCol=total===0?'var(--ink4)':p2>=80?'#34D399':p2>=50?'#F59E0B':'#EF4444';
+          var barCol=p2>=80?'#34D399':p2>=50?'#F59E0B':'#EF4444';
+          var ms=vd.shifts.length>0?vd.shifts[0]:null;
+          var sc2=ms?ms.shift_code:'—', df=ms&&ms.driver_name?ms.driver_name.split(' ')[0]:'—';
+          var sc=shiftColors[sc2]||'var(--ink4)', sb=shiftBg[sc2]||'var(--surface)';
+          return '<div style="display:grid;grid-template-columns:80px 1fr 52px 80px 70px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center;'+(total===0?'opacity:.45':'')+'">'
+            +'<div style="display:flex;align-items:center;gap:5px"><div style="width:6px;height:6px;border-radius:50%;background:'+dotCol+';flex-shrink:0'+(isAct?';box-shadow:0 0 5px '+dotCol:'')+'"></div>'
+            +'<span style="font-family:var(--f-mono);font-size:10px;font-weight:700">'+asset.plate+'</span></div>'
+            +'<div style="font-size:11px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+df+'</div>'
+            +'<div><span style="font-size:9px;font-weight:600;padding:2px 5px;border-radius:4px;background:'+sb+';color:'+sc+'">'+sc2+'</span></div>'
+            +'<div style="font-family:var(--f-mono);font-size:11px;font-weight:700;color:'+(total>0?'var(--ink1)':'var(--ink4)')+';text-align:right">'+(total>0?fP(total):'—')+'</div>'
+            +'<div style="display:flex;align-items:center;gap:4px"><div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+p2+'%;background:'+barCol+';border-radius:2px"></div></div>'
+            +'<span style="font-size:9px;color:var(--ink3);min-width:22px;text-align:right">'+p2+'%</span></div></div>';
+        }).join('');
+        var more=ASSETS.length>12?'<div style="padding:8px 12px;font-size:10px;color:var(--ink3);text-align:center">+'+(ASSETS.length-12)+' more vehicles</div>':'';
+        var leg='<div style="padding:8px 12px;background:var(--surface);border-top:1px solid var(--border);display:flex;gap:14px;font-size:9px;color:var(--ink3)">'
+          +'<span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#34D399;margin-right:4px;vertical-align:middle"></span>'+activeShifts.length+' active</span>'
+          +'<span style="color:#F59E0B">⚠ '+D4W.filter(function(d){return (d.rpd||0)>0&&(d.rpd||0)<1800;}).length+' at risk</span>'
+          +'<span>'+(ASSETS.length-activeShifts.length)+' awaiting shift</span></div>';
+        return '<div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+          +'<div style="font-size:14px;font-weight:700">Fleet Vehicles <span style="font-size:11px;color:var(--ink3);font-weight:400">'+activeShifts.length+'/'+ASSETS.length+' active</span></div>'
+          +'<button class="btn btn-s btn-xs" onclick="goS(\'assets\')">View all →</button></div>'
+          +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
+          +'<div style="display:grid;grid-template-columns:80px 1fr 52px 80px 70px;gap:6px;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em">'
+          +'<span>Plate</span><span>Driver</span><span>Shift</span><span style="text-align:right">Rev</span><span style="text-align:right">Target</span>'
+          +'</div>'+rows+more+leg+'</div></div>';
+      })() : (function(){
+        var vtidMap={'moto-regular':'1','go-car':'2','go-suv':'3','rideshare':null};
+        var svid=vtidMap[ACTIVE_SERVICE], svc=DB_SERVICES[svid||'']||{};
+        var rid=REGISTERED_PARTNERS[svid||'1']||0, act=Number(svc.active_drivers||0);
+        var actP=rid>0?Math.round(act/rid*100):0;
+        var t2=Number(svc.trips||0), g2=Number(svc.gtv||0), c2=Number(svc.commission||0);
+        var ca2=Number(svc.cancelled||0), ex2=Number(svc.expired||0);
+        var cp2=(t2+ca2+ex2)>0?Math.round(t2/(t2+ca2+ex2)*100):0;
+        var cc2=cp2>=90?'var(--green)':cp2>=75?'var(--amber)':'var(--red)';
+        return '<div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+          +'<div style="font-size:14px;font-weight:700">Partner Activity <span style="font-size:11px;color:var(--ink3);font-weight:400">today</span></div></div>'
+          +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+          +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;text-align:center"><div style="font-size:24px;font-weight:700;color:var(--green)">'+act+'</div>'
+          +'<div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-top:3px">Active today</div>'
+          +'<div style="font-size:10px;color:var(--ink3);margin-top:4px">of '+rid+' registered ('+actP+'%)</div></div>'
+          +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;text-align:center"><div style="font-size:24px;font-weight:700;color:'+cc2+'">'+cp2+'%</div>'
+          +'<div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-top:3px">Completion</div>'
+          +'<div style="font-size:10px;color:var(--ink3);margin-top:4px">'+t2.toLocaleString()+' trips · '+ca2+' cancelled</div></div>'
+          +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--f-mono)">₱'+g2.toLocaleString()+'</div>'
+          +'<div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-top:3px">Platform GTV</div>'
+          +'<div style="font-size:10px;color:var(--ink3);margin-top:4px">₱'+Number(svc.avg_fare||0).toLocaleString()+' avg fare</div></div>'
+          +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--f-mono);color:var(--green)">₱'+c2.toLocaleString()+'</div>'
+          +'<div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-top:3px">Xpress commission</div>'
+          +'<div style="font-size:10px;color:var(--ink3);margin-top:4px">20% of GTV</div></div>'
+          +'</div></div>';
+      })();
 
-      <!-- COL 2: Fleet Vehicles (Taxi) -->
-      <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div style="font-size:14px;font-weight:700">Fleet Vehicles <span style="font-size:11px;color:var(--ink3);font-weight:400">${activeShifts.length}/${ASSETS.length} active</span></div>
-          <button class="btn btn-s btn-xs" onclick="goS('assets')">View all →</button>
-        </div>
-        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;max-height:400px;overflow-y:auto">
-          ${ASSETS.slice(0, 20).map(asset => {
-            const vd = vehicleMap[asset.asset_id] || { am: null, pm: null, total: 0 };
-            const tgt = getAssetTarget(asset.asset_id) || 3000;
-            const amRev = vd.am ? (vd.am.gross_revenue || 0) : 0;
-            const pmRev = vd.pm ? (vd.pm.gross_revenue || 0) : 0;
-            const total = vd.total;
-            const amPct = Math.min(100, Math.round(amRev / tgt * 100));
-            const pmPct = Math.min(100 - amPct, Math.round(pmRev / tgt * 100));
-            const totalPct = Math.min(100, Math.round(total / tgt * 100));
-            const isActive = !!ASHIFTS.find(s => s.asset_id === asset.asset_id && s.status === 'active');
-            const statusCol = total === 0 ? 'var(--ink4)' : totalPct >= 80 ? 'var(--green)' : totalPct >= 50 ? 'var(--amber)' : 'var(--red)';
-            return '<div style="padding:7px 12px;border-bottom:1px solid var(--border);' + (total === 0 ? 'opacity:.4' : '') + '">'
-              + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
-              + '<div style="width:6px;height:6px;border-radius:50%;flex-shrink:0;background:' + (isActive ? 'var(--green)' : total > 0 ? 'var(--amber)' : 'var(--border)') + '"></div>'
-              + '<div style="font-family:var(--f-mono);font-size:10px;font-weight:700;width:58px">' + asset.plate + '</div>'
-              + '<div style="font-family:var(--f-mono);font-size:10px;font-weight:700;color:' + statusCol + ';margin-left:auto">' + (total > 0 ? fP(total) : '—') + '</div>'
-              + '</div>'
-              + '<div style="position:relative;height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-left:12px">'
-              + (amPct > 0 ? '<div style="position:absolute;left:0;height:100%;width:' + amPct + '%;background:var(--green)"></div>' : '')
-              + (pmPct > 0 ? '<div style="position:absolute;left:' + amPct + '%;height:100%;width:' + pmPct + '%;background:var(--accent)"></div>' : '')
-              + '<div style="position:absolute;left:50%;top:0;height:100%;width:1px;background:rgba(255,255,255,.2)"></div>'
-              + '</div></div>';
-          }).join('')}
-        </div>
-      </div>
+      var dpInner = (isControlled||isAll) ? (function(){
+        var secs=[
+          {label:'Top performers', col:'#34D399',bg:'rgba(52,211,153,.08)', drivers:driverSegments.top.slice(0,3),   tag:'Top'},
+          {label:'On track',       col:'#60A5FA',bg:'transparent',          drivers:driverSegments.track.slice(0,3), tag:'Track'},
+          {label:'Needs attention',col:'#F59E0B',bg:'rgba(245,158,11,.05)', drivers:driverSegments.risk.slice(0,2),  tag:'At risk'},
+        ];
+        var r=secs.map(function(seg){
+          if(!seg.drivers.length) return '';
+          return '<div style="padding:6px 12px 2px;font-size:9px;font-weight:700;color:'+seg.col+';text-transform:uppercase;letter-spacing:.05em;background:'+seg.bg+';border-bottom:1px solid var(--border)">'+seg.label+'</div>'
+            +seg.drivers.map(function(d){
+              return '<div class="shift-item" onclick="openDriverDrawer(\''+d.id+'\')">'
+                +'<div style="flex:1"><div style="font-size:12px;font-weight:600">'+d.name+'</div>'
+                +'<div style="font-size:10px;color:var(--ink3)">₱'+(d.rph||0)+'/hr · '+(d.att||0)+'% att</div></div>'
+                +'<span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:12px;background:'+seg.bg+';color:'+seg.col+'">'+seg.tag+'</span>'
+                +'<div style="font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--green);width:55px;text-align:right">'+fP(d.rpd||0)+'</div></div>';
+            }).join('');
+        }).join('');
+        return r+'<div style="padding:8px 12px;background:var(--surface);border-top:1px solid var(--border);font-size:9px;color:var(--ink3);display:flex;gap:10px">'
+          +'<span style="color:#34D399">'+driverSegments.top.length+' top</span>'
+          +'<span style="color:#60A5FA">'+driverSegments.track.length+' track</span>'
+          +'<span style="color:#F59E0B">'+driverSegments.risk.length+' at risk</span>'
+          +'<span style="color:#EF4444">'+driverSegments.crit.length+' critical</span></div>';
+      })() : (function(){
+        var hdr='<div style="display:grid;grid-template-columns:1fr 70px 80px 70px;padding:7px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em">'
+          +'<span>Driver</span><span style="text-align:right">Trips</span><span style="text-align:right">GTV</span><span style="text-align:right">vs avg</span></div>';
+        var dr=mktDrivers.list.slice(0,10).map(function(d){
+          var va=mktDrivers.median>0?Math.round((d.gtv-mktDrivers.median)/mktDrivers.median*100):0;
+          var vc=va>=20?'#34D399':va>=-10?'var(--ink3)':'#F59E0B';
+          var vl=va>=20?'Above avg':va>=-10?'Near avg':'Below avg';
+          var lb=va>=20?'rgba(52,211,153,.12)':va>=-10?'var(--surface)':'rgba(245,158,11,.12)';
+          return '<div style="display:grid;grid-template-columns:1fr 70px 80px 70px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center">'
+            +'<div><div style="font-size:11px;font-weight:600">'+d.name+'</div>'
+            +'<div style="font-size:9px;color:var(--ink3)">'+d.days+'d active · ₱'+d.avg_fare+' avg fare</div></div>'
+            +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right">'+d.trips+'</div>'
+            +'<div style="font-family:var(--f-mono);font-size:11px;font-weight:600;text-align:right">₱'+d.gtv.toLocaleString()+'</div>'
+            +'<div style="text-align:right"><span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;background:'+lb+';color:'+vc+'">'+vl+'</span></div></div>';
+        }).join('');
+        var mr=mktDrivers.list.length>10?'<div style="padding:8px 12px;text-align:center;font-size:10px;color:var(--ink3)">+'+(mktDrivers.list.length-10)+' more partners</div>':'';
+        return hdr+dr+mr;
+      })();
 
-      <!-- COL 3: Driver Performance -->
-      <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div style="font-size:14px;font-weight:700">Driver Performance</div>
-          <div style="display:flex;gap:4px">
-            <button class="btn btn-s btn-xs" id="dp-top-btn" onclick="showDriverPerf('top')" style="background:var(--accent);color:#fff;border-color:var(--accent)">Top</button>
-            <button class="btn btn-s btn-xs" id="dp-str-btn" onclick="showDriverPerf('struggling')">Struggling</button>
-          </div>
-        </div>
-        <div id="driver-perf-panel" style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">
-          ${D4W.slice(0, 10).map((d, i) => {
-            const tier = gTier(d);
-            const tcls = 'tier-' + tier.toLowerCase().replace(/ /g, '-').replace(/_/g, '-');
-            return '<div class="shift-item" onclick="openDriverDrawer(\'' + d.id + '\')">'
-              + '<div style="width:20px;font-size:11px;font-weight:700;color:var(--ink3)">' + (i===0?'🥇':i===1?'🥈':i===2?'🥉':'#'+(i+1)) + '</div>'
-              + '<div style="flex:1"><div style="font-size:12px;font-weight:600">' + d.name + '</div><div style="font-size:10px;color:var(--ink3)">₱' + (d.rph||0).toFixed(0) + '/hr · ' + (d.att||0) + '% att</div></div>'
-              + '<span class="badge ' + tcls + '">' + tier + '</span>'
-              + '<div style="font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--green);width:55px;text-align:right">' + fP(d.rpd||0) + '</div>'
-              + '</div>';
-          }).join('')}
-        </div>
-      </div>
+      var col2='<div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+        +'<div style="font-size:14px;font-weight:700">Driver Performance</div>'
+        +'<div style="display:flex;gap:4px">'
+        +'<button class="btn btn-s btn-xs" id="dp-top-btn" onclick="showDriverPerf(\'top\')" style="background:var(--accent);color:#fff;border-color:var(--accent)">Top</button>'
+        +'<button class="btn btn-s btn-xs" id="dp-str-btn" onclick="showDriverPerf(\'struggling\')">Struggling</button>'
+        +'</div></div>'
+        +'<div id="driver-perf-panel" style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'+dpInner+'</div></div>';
 
-      <!-- COL 4: Alerts -->
-      <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div style="font-size:14px;font-weight:700">Alerts</div>
-          <div style="display:flex;gap:4px">
-            ${critAlerts.length ? '<span class="badge badge-red">' + critAlerts.length + ' critical</span>' : ''}
-            ${warnAlerts.length ? '<span class="badge badge-amber">' + warnAlerts.length + ' warning</span>' : ''}
-          </div>
-        </div>
-        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">
-          ${allAlerts.length === 0
-            ? '<div class="empty" style="padding:20px"><div class="empty-icon">✅</div><div class="empty-title" style="font-size:12px">All clear</div></div>'
-            : allAlerts.slice(0, 12).map(a => {
-                const sev = a.sev === 'red'   ? { bg: '#FEF2F2',          col: 'var(--red)'  }
-                          : a.sev === 'amber' ? { bg: 'var(--amber-b)',    col: 'var(--amber)'}
-                                              : { bg: 'var(--surface)',    col: 'var(--ink3)' };
-                return '<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);background:' + sev.bg + '">'
-                  + '<div class="dot ' + (a.sev==='red'?'r':a.sev==='amber'?'a':'b') + '" style="margin-top:3px;flex-shrink:0"></div>'
-                  + '<div style="flex:1"><div style="font-size:11px;color:' + sev.col + ';font-weight:600">' + a.msg + '</div><div style="font-size:9.5px;color:var(--ink3);margin-top:2px">' + a.cat + '</div></div>'
-                  + '</div>';
-              }).join('')
-          }
-        </div>
-      </div>
+      var ai=allAlerts.length===0
+        ?'<div class="empty" style="padding:20px"><div class="empty-icon">✅</div><div class="empty-title" style="font-size:12px">All clear</div></div>'
+        :allAlerts.slice(0,10).map(function(a){
+            var sv=a.sev==='red'?{bg:'rgba(239,68,68,.06)',br:'#EF4444',co:'#991B1B',ic:'!'}
+                  :a.sev==='amber'?{bg:'rgba(245,158,11,.06)',br:'#F59E0B',co:'#92400E',ic:'~'}
+                  :{bg:'',br:'var(--border)',co:'var(--ink3)',ic:'i'};
+            return '<div style="display:flex;align-items:flex-start;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border);background:'+sv.bg+';border-left:3px solid '+sv.br+'">'
+              +'<div style="width:16px;height:16px;border-radius:50%;background:'+sv.bg+';border:1px solid '+sv.br+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:'+sv.co+';flex-shrink:0;margin-top:1px">'+sv.ic+'</div>'
+              +'<div style="flex:1"><div style="font-size:11px;font-weight:600;color:'+sv.co+'">'+a.msg+'</div>'
+              +'<div style="font-size:9px;color:var(--ink3);margin-top:2px">'+a.cat+'</div></div></div>';
+          }).join('');
 
-    </div>`;
+      var col3='<div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+        +'<div style="font-size:14px;font-weight:700">Exceptions</div>'
+        +'<div style="display:flex;gap:4px">'
+        +(critAlerts.length?'<span class="badge badge-red">'+critAlerts.length+' critical</span>':'')
+        +(warnAlerts.length?'<span class="badge badge-amber">'+warnAlerts.length+' warning</span>':'')
+        +'</div></div>'
+        +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'+ai+'</div></div>';
+
+      var gc=isMarketplace?'1fr 1.4fr 0.8fr':'1.8fr 1.4fr 0.8fr';
+      return '<div style="display:grid;grid-template-columns:'+gc+';gap:8px;padding:var(--s4)">'+col1+col2+col3+'</div>';
+    })();
     return;
   }
 
@@ -2052,150 +2101,143 @@ function buildCmd() {
     })()}
   </div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--s4)">
+  ${(function(){
+      var shiftColors = { AM1:'#34D399',AM2:'#60A5FA',PM1:'#FBBF24',PM2:'#A78BFA',PM3:'#F87171' };
+      var shiftBg     = { AM1:'rgba(52,211,153,.15)',AM2:'rgba(96,165,250,.15)',PM1:'rgba(251,191,36,.15)',PM2:'rgba(167,139,250,.15)',PM3:'rgba(248,113,113,.15)' };
+      var vm2 = {};
+      ASHIFTS.forEach(function(s){ if(!vm2[s.asset_id]) vm2[s.asset_id]={shifts:[],total:0}; vm2[s.asset_id].shifts.push(s); vm2[s.asset_id].total+=(s.gross_revenue||0); });
 
-    <!-- COL 1: VEHICLES or TRIPS depending on service -->
-    <div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:14px;font-weight:700">
-          ${showVehiclePanel
-            ? 'Fleet Vehicles <span style="font-size:11px;color:var(--ink3);font-weight:400">' + activeShifts.length + '/' + ASSETS.length + ' active today</span>'
-            : 'Service Summary <span style="font-size:11px;color:var(--ink3);font-weight:400">' + svcDrivers + ' drivers online</span>'
-          }
-        </div>
-        ${showVehiclePanel ? '<button class="btn btn-s btn-xs" onclick="goS(\'assets\')">View all →</button>' : ''}
-      </div>
+      var col1 = (isControlled||isAll) ? (function(){
+        var rows = ASSETS.slice(0,12).map(function(asset){
+          var vd=vm2[asset.asset_id]||{shifts:[],total:0};
+          var tgt=getAssetTarget(asset.asset_id)||3000, total=vd.total;
+          var p2=Math.min(100,Math.round(total/tgt*100));
+          var isAct=vd.shifts.some(function(s){return s.status==='active';});
+          var dotCol=total===0?'var(--ink4)':p2>=80?'#34D399':p2>=50?'#F59E0B':'#EF4444';
+          var barCol=p2>=80?'#34D399':p2>=50?'#F59E0B':'#EF4444';
+          var ms=vd.shifts.length>0?vd.shifts[0]:null;
+          var sc2=ms?ms.shift_code:'—', df=ms&&ms.driver_name?ms.driver_name.split(' ')[0]:'—';
+          var sc=shiftColors[sc2]||'var(--ink4)', sb=shiftBg[sc2]||'var(--surface)';
+          return '<div style="display:grid;grid-template-columns:80px 1fr 52px 80px 70px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center;'+(total===0?'opacity:.45':'')+'">'
+            +'<div style="display:flex;align-items:center;gap:5px"><div style="width:6px;height:6px;border-radius:50%;background:'+dotCol+';flex-shrink:0'+(isAct?';box-shadow:0 0 5px '+dotCol:'')+'"></div>'
+            +'<span style="font-family:var(--f-mono);font-size:10px;font-weight:700">'+asset.plate+'</span></div>'
+            +'<div style="font-size:11px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+df+'</div>'
+            +'<div><span style="font-size:9px;font-weight:600;padding:2px 5px;border-radius:4px;background:'+sb+';color:'+sc+'">'+sc2+'</span></div>'
+            +'<div style="font-family:var(--f-mono);font-size:11px;font-weight:700;color:'+(total>0?'var(--ink1)':'var(--ink4)')+';text-align:right">'+(total>0?fP(total):'—')+'</div>'
+            +'<div style="display:flex;align-items:center;gap:4px"><div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+p2+'%;background:'+barCol+';border-radius:2px"></div></div>'
+            +'<span style="font-size:9px;color:var(--ink3);min-width:22px;text-align:right">'+p2+'%</span></div></div>';
+        }).join('');
+        var more=ASSETS.length>12?'<div style="padding:8px 12px;font-size:10px;color:var(--ink3);text-align:center">+'+(ASSETS.length-12)+' more vehicles</div>':'';
+        var leg='<div style="padding:8px 12px;background:var(--surface);border-top:1px solid var(--border);display:flex;gap:14px;font-size:9px;color:var(--ink3)">'
+          +'<span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#34D399;margin-right:4px;vertical-align:middle"></span>'+activeShifts.length+' active</span>'
+          +'<span style="color:#F59E0B">⚠ '+D4W.filter(function(d){return (d.rpd||0)>0&&(d.rpd||0)<1800;}).length+' at risk</span>'
+          +'<span>'+(ASSETS.length-activeShifts.length)+' awaiting shift</span></div>';
+        return '<div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+          +'<div style="font-size:14px;font-weight:700">Fleet Vehicles <span style="font-size:11px;color:var(--ink3);font-weight:400">'+activeShifts.length+'/'+ASSETS.length+' active</span></div>'
+          +'<button class="btn btn-s btn-xs" onclick="goS(\'assets\')">View all →</button></div>'
+          +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
+          +'<div style="display:grid;grid-template-columns:80px 1fr 52px 80px 70px;gap:6px;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em">'
+          +'<span>Plate</span><span>Driver</span><span>Shift</span><span style="text-align:right">Rev</span><span style="text-align:right">Target</span>'
+          +'</div>'+rows+more+leg+'</div></div>';
+      })() : (function(){
+        var vtidMap={'moto-regular':'1','go-car':'2','go-suv':'3','rideshare':null};
+        var svid=vtidMap[ACTIVE_SERVICE], svc=DB_SERVICES[svid||'']||{};
+        var rid=REGISTERED_PARTNERS[svid||'1']||0, act=Number(svc.active_drivers||0);
+        var actP=rid>0?Math.round(act/rid*100):0;
+        var t2=Number(svc.trips||0), g2=Number(svc.gtv||0), c2=Number(svc.commission||0);
+        var ca2=Number(svc.cancelled||0), ex2=Number(svc.expired||0);
+        var cp2=(t2+ca2+ex2)>0?Math.round(t2/(t2+ca2+ex2)*100):0;
+        var cc2=cp2>=90?'var(--green)':cp2>=75?'var(--amber)':'var(--red)';
+        return '<div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+          +'<div style="font-size:14px;font-weight:700">Partner Activity <span style="font-size:11px;color:var(--ink3);font-weight:400">today</span></div></div>'
+          +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+          +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;text-align:center"><div style="font-size:24px;font-weight:700;color:var(--green)">'+act+'</div>'
+          +'<div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-top:3px">Active today</div>'
+          +'<div style="font-size:10px;color:var(--ink3);margin-top:4px">of '+rid+' registered ('+actP+'%)</div></div>'
+          +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;text-align:center"><div style="font-size:24px;font-weight:700;color:'+cc2+'">'+cp2+'%</div>'
+          +'<div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-top:3px">Completion</div>'
+          +'<div style="font-size:10px;color:var(--ink3);margin-top:4px">'+t2.toLocaleString()+' trips · '+ca2+' cancelled</div></div>'
+          +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--f-mono)">₱'+g2.toLocaleString()+'</div>'
+          +'<div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-top:3px">Platform GTV</div>'
+          +'<div style="font-size:10px;color:var(--ink3);margin-top:4px">₱'+Number(svc.avg_fare||0).toLocaleString()+' avg fare</div></div>'
+          +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--f-mono);color:var(--green)">₱'+c2.toLocaleString()+'</div>'
+          +'<div style="font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-top:3px">Xpress commission</div>'
+          +'<div style="font-size:10px;color:var(--ink3);margin-top:4px">20% of GTV</div></div>'
+          +'</div></div>';
+      })();
 
-      ${showVehiclePanel ? (() => {
-        var vehicleMap = {};
-        ASHIFTS.forEach(function(s) {
-          var key = s.asset_id;
-          if (!vehicleMap[key]) vehicleMap[key] = { shifts: [], total: 0 };
-          if (!vehicleMap[key].shifts) vehicleMap[key].shifts = [];
-          vehicleMap[key].shifts.push(s);
-          vehicleMap[key].total += s.gross_revenue || 0;
-        });
+      var dpInner = (isControlled||isAll) ? (function(){
+        var secs=[
+          {label:'Top performers', col:'#34D399',bg:'rgba(52,211,153,.08)', drivers:driverSegments.top.slice(0,3),   tag:'Top'},
+          {label:'On track',       col:'#60A5FA',bg:'transparent',          drivers:driverSegments.track.slice(0,3), tag:'Track'},
+          {label:'Needs attention',col:'#F59E0B',bg:'rgba(245,158,11,.05)', drivers:driverSegments.risk.slice(0,2),  tag:'At risk'},
+        ];
+        var r=secs.map(function(seg){
+          if(!seg.drivers.length) return '';
+          return '<div style="padding:6px 12px 2px;font-size:9px;font-weight:700;color:'+seg.col+';text-transform:uppercase;letter-spacing:.05em;background:'+seg.bg+';border-bottom:1px solid var(--border)">'+seg.label+'</div>'
+            +seg.drivers.map(function(d){
+              return '<div class="shift-item" onclick="openDriverDrawer(\''+d.id+'\')">'
+                +'<div style="flex:1"><div style="font-size:12px;font-weight:600">'+d.name+'</div>'
+                +'<div style="font-size:10px;color:var(--ink3)">₱'+(d.rph||0)+'/hr · '+(d.att||0)+'% att</div></div>'
+                +'<span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:12px;background:'+seg.bg+';color:'+seg.col+'">'+seg.tag+'</span>'
+                +'<div style="font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--green);width:55px;text-align:right">'+fP(d.rpd||0)+'</div></div>';
+            }).join('');
+        }).join('');
+        return r+'<div style="padding:8px 12px;background:var(--surface);border-top:1px solid var(--border);font-size:9px;color:var(--ink3);display:flex;gap:10px">'
+          +'<span style="color:#34D399">'+driverSegments.top.length+' top</span>'
+          +'<span style="color:#60A5FA">'+driverSegments.track.length+' track</span>'
+          +'<span style="color:#F59E0B">'+driverSegments.risk.length+' at risk</span>'
+          +'<span style="color:#EF4444">'+driverSegments.crit.length+' critical</span></div>';
+      })() : (function(){
+        var hdr='<div style="display:grid;grid-template-columns:1fr 70px 80px 70px;padding:7px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em">'
+          +'<span>Driver</span><span style="text-align:right">Trips</span><span style="text-align:right">GTV</span><span style="text-align:right">vs avg</span></div>';
+        var dr=mktDrivers.list.slice(0,10).map(function(d){
+          var va=mktDrivers.median>0?Math.round((d.gtv-mktDrivers.median)/mktDrivers.median*100):0;
+          var vc=va>=20?'#34D399':va>=-10?'var(--ink3)':'#F59E0B';
+          var vl=va>=20?'Above avg':va>=-10?'Near avg':'Below avg';
+          var lb=va>=20?'rgba(52,211,153,.12)':va>=-10?'var(--surface)':'rgba(245,158,11,.12)';
+          return '<div style="display:grid;grid-template-columns:1fr 70px 80px 70px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center">'
+            +'<div><div style="font-size:11px;font-weight:600">'+d.name+'</div>'
+            +'<div style="font-size:9px;color:var(--ink3)">'+d.days+'d active · ₱'+d.avg_fare+' avg fare</div></div>'
+            +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right">'+d.trips+'</div>'
+            +'<div style="font-family:var(--f-mono);font-size:11px;font-weight:600;text-align:right">₱'+d.gtv.toLocaleString()+'</div>'
+            +'<div style="text-align:right"><span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;background:'+lb+';color:'+vc+'">'+vl+'</span></div></div>';
+        }).join('');
+        var mr=mktDrivers.list.length>10?'<div style="padding:8px 12px;text-align:center;font-size:10px;color:var(--ink3)">+'+(mktDrivers.list.length-10)+' more partners</div>':'';
+        return hdr+dr+mr;
+      })();
 
-        return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;max-height:480px;overflow-y:auto">'
-          + ASSETS.map(function(asset) {
-            var vd = vehicleMap[asset.asset_id] || { shifts: [], total: 0 };
-            var shifts = vd.shifts || [];
-            var tgt = getAssetTarget(asset.asset_id) || 3000;
-            var total = shifts.reduce(function(s,sh){ return s+(sh.gross_revenue||0); }, 0);
-            var totalPct = Math.min(100, Math.round(total/tgt*100));
-            var isActive = shifts.some(function(sh){ return sh.status==='active'; });
-            var statusCol = total===0?'var(--ink4)':totalPct>=80?'var(--green)':totalPct>=50?'var(--amber)':'var(--red)';
-            var driverNames = shifts.map(function(sh){ return sh.driver_name?sh.driver_name.split(' ')[0]:''; }).filter(Boolean).join(' · ');
+      var col2='<div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+        +'<div style="font-size:14px;font-weight:700">Driver Performance</div>'
+        +'<div style="display:flex;gap:4px">'
+        +'<button class="btn btn-s btn-xs" id="dp-top-btn" onclick="showDriverPerf(\'top\')" style="background:var(--accent);color:#fff;border-color:var(--accent)">Top</button>'
+        +'<button class="btn btn-s btn-xs" id="dp-str-btn" onclick="showDriverPerf(\'struggling\')">Struggling</button>'
+        +'</div></div>'
+        +'<div id="driver-perf-panel" style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'+dpInner+'</div></div>';
 
-            var barHtml = '<div style="position:relative;height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-left:15px">';
-            var cumPct = 0;
-            shifts.forEach(function(sh) {
-              var shPct = Math.min(100-cumPct, Math.round((sh.gross_revenue||0)/tgt*100));
-              if (shPct > 0) {
-                var shiftDef = getShift(sh.shift_code);
-                barHtml += '<div style="position:absolute;left:'+cumPct+'%;height:100%;width:'+shPct+'%;background:'+shiftDef.color+';border-radius:3px" title="'+shiftDef.label+': '+fP(sh.gross_revenue||0)+'"></div>';
-                cumPct += shPct;
-              }
-            });
-            barHtml += '</div>';
+      var ai=allAlerts.length===0
+        ?'<div class="empty" style="padding:20px"><div class="empty-icon">✅</div><div class="empty-title" style="font-size:12px">All clear</div></div>'
+        :allAlerts.slice(0,10).map(function(a){
+            var sv=a.sev==='red'?{bg:'rgba(239,68,68,.06)',br:'#EF4444',co:'#991B1B',ic:'!'}
+                  :a.sev==='amber'?{bg:'rgba(245,158,11,.06)',br:'#F59E0B',co:'#92400E',ic:'~'}
+                  :{bg:'',br:'var(--border)',co:'var(--ink3)',ic:'i'};
+            return '<div style="display:flex;align-items:flex-start;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border);background:'+sv.bg+';border-left:3px solid '+sv.br+'">'
+              +'<div style="width:16px;height:16px;border-radius:50%;background:'+sv.bg+';border:1px solid '+sv.br+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:'+sv.co+';flex-shrink:0;margin-top:1px">'+sv.ic+'</div>'
+              +'<div style="flex:1"><div style="font-size:11px;font-weight:600;color:'+sv.co+'">'+a.msg+'</div>'
+              +'<div style="font-size:9px;color:var(--ink3);margin-top:2px">'+a.cat+'</div></div></div>';
+          }).join('');
 
-            var shiftLabelsHtml = shifts.length > 0
-              ? '<div style="display:flex;gap:8px;margin-left:15px;margin-top:3px">'
-                + shifts.map(function(sh) {
-                    var def = getShift(sh.shift_code);
-                    return '<div style="font-size:9px;color:'+def.color+'">'
-                      + '<span style="font-weight:700">'+def.code+'</span> '
-                      + fP(sh.gross_revenue||0)
-                      + (sh.driver_name ? ' · '+sh.driver_name.split(' ')[0] : '')
-                      + '</div>';
-                  }).join('')
-                + '</div>'
-              : '';
+      var col3='<div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+        +'<div style="font-size:14px;font-weight:700">Exceptions</div>'
+        +'<div style="display:flex;gap:4px">'
+        +(critAlerts.length?'<span class="badge badge-red">'+critAlerts.length+' critical</span>':'')
+        +(warnAlerts.length?'<span class="badge badge-amber">'+warnAlerts.length+' warning</span>':'')
+        +'</div></div>'
+        +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'+ai+'</div></div>';
 
-            return '<div style="padding:8px 12px;border-bottom:1px solid var(--border);'
-              + (total === 0 ? 'opacity:.45;' : '') + '">'
-              + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">'
-              + '<div style="width:7px;height:7px;border-radius:50%;background:' + (isActive ? 'var(--green)' : total > 0 ? 'var(--amber)' : 'var(--border)') + ';flex-shrink:0' + (isActive ? ';box-shadow:0 0 5px var(--green)' : '') + '"></div>'
-              + '<div style="font-family:var(--f-mono);font-size:11px;font-weight:700;width:68px">' + asset.plate + '</div>'
-              + '<div style="flex:1;font-size:10px;color:var(--ink3);overflow:hidden;white-space:nowrap;text-overflow:ellipsis">' + (driverNames || 'No shift today') + '</div>'
-              + '<div style="font-family:var(--f-mono);font-size:11px;font-weight:700;color:' + statusCol + '">' + (total > 0 ? fP(total) : '—') + '</div>'
-              + '<div style="font-size:10px;color:var(--ink3);width:28px;text-align:right">' + (total > 0 ? totalPct + '%' : '') + '</div>'
-              + '</div>'
-              + barHtml
-              + (total > 0 ? shiftLabelsHtml : '')
-              + '</div>';
-          }).join('')
-          + '</div>';
-      })()
-      : '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:20px">'
-        + '<div style="text-align:center;margin-bottom:16px">'
-        + '<div style="font-size:28px;font-weight:800;font-family:var(--f-mono);color:var(--green)">' + trips.toLocaleString() + '</div>'
-        + '<div style="font-size:11px;color:var(--ink3);margin-top:2px">completed trips today</div>'
-        + '</div>'
-        + '<div style="display:flex;flex-direction:column;gap:8px">'
-        + '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:11px">'
-        + '<span style="color:var(--ink3)">Active drivers</span><span style="font-weight:600">' + svcDrivers + '</span></div>'
-        + '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:11px">'
-        + '<span style="color:var(--ink3)">Avg fare</span><span style="font-weight:600;font-family:var(--f-mono)">' + fP(avgFare) + '</span></div>'
-        + '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:11px">'
-        + '<span style="color:var(--ink3)">Completion rate</span><span style="font-weight:600;color:' + (svcCompPct>=90?'var(--green)':svcCompPct>=75?'var(--amber)':'var(--red)') + '">' + svcCompPct + '%</span></div>'
-        + '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:11px">'
-        + '<span style="color:var(--ink3)">Cancelled</span><span style="font-weight:600;color:' + (svcCancelled>0?'var(--red)':'var(--ink3)') + '">' + svcCancelled.toLocaleString() + '</span></div>'
-        + '</div>'
-        + '<div style="margin-top:12px;padding:10px;background:var(--surface);border-radius:var(--rs);font-size:10px;color:var(--ink3);text-align:center">Per-vehicle shift detail available for Taxi service</div>'
-        + '</div>'
-      }
-    </div>
-
-    <!-- COL 2: DRIVER PERFORMANCE -->
-    <div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:14px;font-weight:700">Driver Performance</div>
-        <div style="display:flex;gap:4px">
-          <button class="btn btn-s btn-xs" id="dp-top-btn" onclick="showDriverPerf('top')" style="background:var(--accent);color:#fff;border-color:var(--accent)">Top</button>
-          <button class="btn btn-s btn-xs" id="dp-str-btn" onclick="showDriverPerf('struggling')">Struggling</button>
-        </div>
-      </div>
-      <div id="driver-perf-panel" style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">
-        ${D4W.slice(0, 8).map((d, i) => {
-          const tier = gTier(d);
-          const tcls = 'tier-' + tier.toLowerCase().replace(/ /g, '-').replace(/_/g, '-');
-          return `<div class="shift-item" onclick="openDriverDrawer('${d.id}')">
-            <div style="width:20px;font-size:11px;font-weight:700;color:var(--ink3)">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1)}</div>
-            <div style="flex:1"><div style="font-size:12px;font-weight:600">${d.name}</div><div style="font-size:10px;color:var(--ink3)">₱${(d.rph||0).toFixed(0)}/hr · ${d.att||0}% att</div></div>
-            <span class="badge ${tcls}">${tier}</span>
-            <div style="font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--green);width:55px;text-align:right">${fP(d.rpd || 0)}</div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>
-
-    <!-- COL 3: ALERTS -->
-    <div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:14px;font-weight:700">Alerts</div>
-        <div style="display:flex;gap:4px">
-          ${critAlerts.length ? `<span class="badge badge-red">${critAlerts.length} critical</span>` : ''}
-          ${warnAlerts.length ? `<span class="badge badge-amber">${warnAlerts.length} warning</span>` : ''}
-        </div>
-      </div>
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">
-        ${allAlerts.length === 0
-          ? '<div class="empty" style="padding:20px"><div class="empty-icon">✅</div><div class="empty-title" style="font-size:12px">All clear</div></div>'
-          : allAlerts.slice(0, 12).map(a => {
-              const sev = a.sev === 'red' ? { dot: 'r', bg: '#FEF2F2', col: 'var(--red)' }
-                       : a.sev === 'amber' ? { dot: 'a', bg: 'var(--amber-b)', col: 'var(--amber)' }
-                       : { dot: 'b', bg: 'var(--surface)', col: 'var(--ink3)' };
-              return `<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);background:${sev.bg}">
-                <div class="dot ${sev.dot}" style="margin-top:3px;flex-shrink:0"></div>
-                <div style="flex:1"><div style="font-size:11px;color:${sev.col};font-weight:600">${a.msg}</div><div style="font-size:9.5px;color:var(--ink3);margin-top:2px">${a.cat}</div></div>
-              </div>`;
-            }).join('')
-        }
-      </div>
-    </div>
-
-  </div>`;
+      var gc=isMarketplace?'1fr 1.4fr 0.8fr':'1.8fr 1.4fr 0.8fr';
+      return '<div style="display:grid;grid-template-columns:'+gc+';gap:8px;padding:var(--s4)">'+col1+col2+col3+'</div>';
+    })()}`;
 
   updateTopbar();
 }
