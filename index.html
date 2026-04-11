@@ -1021,8 +1021,10 @@ function dbRefreshAll() {
   dbCall('services_overview', function(data) {
     if (data && data.length) {
       DB_SERVICES = {};
+      DB_ACTIVE_NOW = {};
       data.forEach(function(r) {
         var vtid = String(r.vehicle_type_id || r.VehicleTypeId || r.vehicletypeid || '');
+        DB_ACTIVE_NOW[vtid] = Number(r.active_now || 0);
         DB_SERVICES[vtid] = {
           trips: Number(r.trips || 0),
           cancelled: Number(r.cancelled || 0),
@@ -1032,6 +1034,7 @@ function dbRefreshAll() {
           xpress_revenue: Number(r.xpress_revenue || 0),
           commission: Number(r.commission || 0),
           avg_fare: Number(r.avg_fare || 0),
+          active_now: Number(r.active_now || 0),
         };
       });
       renderServiceStrip();
@@ -1072,6 +1075,7 @@ var OPS_DAY_CONFIG = {
   schedule_change_date: '2025-05-01',
 };
 var DB_SERVICES = {}; // keyed by vehicleTypeId, populated by services_overview query
+var DB_ACTIVE_NOW = {}; // { '16': 8, '1': 5, ... } keyed by vtid string
 var DB_RIDESHARE_PERF = []; // rideshare driver MTD performance
 
 var SHIFT_SCHEDULE = [
@@ -1615,7 +1619,7 @@ function buildCmd() {
       { id: '3',  label: 'SUV',   icon: '🚙', commission: true  },
       { id: '10', label: 'Trike', icon: '🛺', commission: false },
     ];
-    var totRev=0, totGtv=0, totTrips=0, totCancelled=0, totExpired=0, totActiveNow=0, totDemand=0;
+    var totRev=0, totGtv=0, totTrips=0, totCancelled=0, totExpired=0, totDemand=0;
     svcDefs.forEach(function(s) {
       var d = DB_SERVICES[s.id] || {};
       totRev       += s.commission ? Number(d.commission||0) : Number(d.xpress_revenue||0);
@@ -1623,14 +1627,11 @@ function buildCmd() {
       totTrips     += Number(d.trips||0);
       totCancelled += Number(d.cancelled||0);
       totExpired   += Number(d.expired||0);
-      totActiveNow += Number(d.active_now||0);
     });
-    console.log('DB_SERVICES:', JSON.stringify(DB_SERVICES));
-    console.log('totActiveNow:', totActiveNow);
+    var totActiveNow = Object.values(DB_ACTIVE_NOW).reduce(function(s,v){ return s+v; }, 0);
     totDemand = totTrips + totCancelled + totExpired;
     var totCompPct = totDemand > 0 ? Math.round(totTrips/totDemand*100) : 0;
     var compCol = totCompPct>=90?'#34D399':totCompPct>=75?'#FCD34D':'#F87171';
-    console.log('Active now total:', totActiveNow, 'DB_SERVICES keys:', Object.keys(DB_SERVICES));
 
     function svcRow(id, icon, label, val, col) {
       return '<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.06)">'
@@ -1726,7 +1727,7 @@ function buildCmd() {
           <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Active Trips <span style="font-size:8px;font-weight:500;background:rgba(52,211,153,.15);color:#34D399;padding:1px 5px;border-radius:6px;margin-left:3px">LIVE</span></div>
           <div style="font-size:26px;font-weight:800;font-family:var(--f-mono);color:#34D399;letter-spacing:-1px;line-height:1">${totActiveNow.toLocaleString()}</div>
           <div style="margin-top:10px;font-size:9px;color:rgba(255,255,255,.3);margin-bottom:4px">By service</div>
-          ${svcDefs.map(function(s){ var d=DB_SERVICES[s.id]||{}; var a=Number(d.active_now||0); return a>0?svcRow(s.id,s.icon,s.label,a.toLocaleString(),'#34D399'):''; }).join('')}
+          ${svcDefs.map(function(s){ var a=DB_ACTIVE_NOW[s.id]||0; return a>0?svcRow(s.id,s.icon,s.label,a.toLocaleString(),'#34D399'):''; }).join('')}
           <div style="margin-top:8px;display:flex;justify-content:space-between;font-size:9px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08)">
             <span style="color:rgba(255,255,255,.35)">In pickup / en route</span>
             <span style="color:#34D399;font-family:var(--f-mono)">${totActiveNow}</span>
