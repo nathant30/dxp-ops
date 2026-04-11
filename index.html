@@ -949,7 +949,7 @@ function dbRefreshAll() {
   DB_LOADING = true;
   updateStaleIndicator(true);
 
-  var _pending = 6;
+  var _pending = 7;
   var _anyData = false;
   function _done(gotData) {
     if (gotData) _anyData = true;
@@ -1062,9 +1062,26 @@ function dbRefreshAll() {
           trips: Number(r.trips || 0),
           gtv: Number(r.gtv || 0),
           commission: Number(r.commission || 0),
+          incentives: Number(r.incentives || 0),
+          avg_rating: Number(r.avg_rating || 0),
           days: Number(r.days || 0),
           avg_fare: Number(r.avg_fare || 0),
           cpd: Number(r.days) > 0 ? Math.round(Number(r.commission || 0) / Number(r.days)) : 0,
+        };
+      });
+    }
+    _done(!!(data && data.length));
+  });
+
+  dbCall('demand_by_hour', function(data) {
+    if (data && data.length) {
+      DB_DEMAND_HOURS = data.map(function(r) {
+        return {
+          hour: Number(r.pht_hour || 0),
+          vtid: String(r.vehicle_type_id || ''),
+          completed: Number(r.completed || 0),
+          cancelled: Number(r.cancelled || 0),
+          total: Number(r.total_requested || 0),
         };
       });
     }
@@ -1087,6 +1104,7 @@ var DB_SERVICES = {}; // keyed by vehicleTypeId, populated by services_overview 
 var DB_QUEUED_NOW  = {};  // StatusId 1,2 — waiting for driver, keyed by vtid string
 var DB_IN_TRIP_NOW = {};  // StatusId 4,11,5 — driver in motion, keyed by vtid string
 var DB_RIDESHARE_PERF = []; // rideshare driver MTD performance
+var DB_DEMAND_HOURS = []; // array of { hour, vtid, completed, cancelled, total }
 
 var SHIFT_SCHEDULE = [
   { code: 'AM1', label: 'Morning 1',   start_hour: 4,  color: '#34D399', drivers_target: 17 },
@@ -1622,7 +1640,7 @@ function buildCmd() {
   }
 
   const isControlled = ACTIVE_SERVICE === 'taxi';
-  const isMarketplace = ['moto-regular','go-car','go-suv','rideshare'].includes(ACTIVE_SERVICE);
+  const isMarketplace = ['moto-regular','go-car','go-suv','rideshare','etrike'].includes(ACTIVE_SERVICE);
   const isAll = ACTIVE_SERVICE === 'all';
 
   const driverSegments = (function() {
@@ -1820,12 +1838,13 @@ function buildCmd() {
     </div>
 
     <div style="padding:0 var(--s4) var(--s4)">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:8px">
         ${[
           { id:'16', label:'Taxi',         icon:'🚖', svc:'taxi',         commission:false },
           { id:'1',  label:'Moto Regular', icon:'🛵', svc:'moto-regular', commission:true  },
           { id:'2',  label:'Go Car',       icon:'🚗', svc:'go-car',       commission:true  },
           { id:'3',  label:'Go SUV',       icon:'🚙', svc:'go-suv',       commission:true  },
+          { id:'10', label:'e-Trike',       icon:'🛺', svc:'etrike',       commission:false },
         ].map(function(s) {
           var d = DB_SERVICES[s.id] || {};
           var rev = s.commission ? Number(d.commission||0) : Number(d.xpress_revenue||0);
@@ -1865,6 +1884,18 @@ function buildCmd() {
       var shiftBg = { AM1:'rgba(52,211,153,.15)',AM2:'rgba(96,165,250,.15)',PM1:'rgba(251,191,36,.15)',PM2:'rgba(167,139,250,.15)',PM3:'rgba(248,113,113,.15)' };
       var vm2 = {};
       ASHIFTS.forEach(function(s){ if(!vm2[s.asset_id]) vm2[s.asset_id]={shifts:[],total:0}; vm2[s.asset_id].shifts.push(s); vm2[s.asset_id].total+=(s.gross_revenue||0); });
+
+      // Fallback: if vm2 is empty, use DB_ASSET_REV keyed by vehicle_id
+      if (Object.keys(vm2).length === 0 && window.DB_ASSET_REV) {
+        Object.keys(window.DB_ASSET_REV).forEach(function(vid) {
+          var asset = ASSETS.find(function(a) { return String(a.vehicle_id) === String(vid); });
+          if (asset) {
+            var key = asset.asset_id;
+            if (!vm2[key]) vm2[key] = { shifts:[], total:0 };
+            vm2[key].total += Number(window.DB_ASSET_REV[vid]||0);
+          }
+        });
+      }
 
       // col3 — alerts (shared across all branches)
       var ai = allAlerts.length===0
@@ -1954,11 +1985,51 @@ function buildCmd() {
           +'</div></div>'
           +'<div id="driver-perf-panel" style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'+dpInner+'</div></div>';
 
-        return '<div style="display:grid;grid-template-columns:1.8fr 1.4fr 0.8fr;gap:8px;padding:var(--s4)">'+col1+col2+col3+'</div>';
+        var demandChart = (function(){
+          var hourMap = {};
+          for (var h = 0; h < 24; h++) hourMap[h] = { completed: 0, cancelled: 0, total: 0 };
+          DB_DEMAND_HOURS.forEach(function(r) {
+            if (hourMap[r.hour] !== undefined) {
+              hourMap[r.hour].completed += r.completed;
+              hourMap[r.hour].cancelled += r.cancelled;
+              hourMap[r.hour].total     += r.total;
+            }
+          });
+          var maxVal = 1;
+          for (var hh = 0; hh < 24; hh++) { if (hourMap[hh].total > maxVal) maxVal = hourMap[hh].total; }
+          var phtH = (new Date(Date.now() + 8*3600000)).getUTCHours();
+          var bars = '';
+          for (var h2 = 0; h2 < 24; h2++) {
+            var hd = hourMap[h2];
+            var compH = Math.round(hd.completed / maxVal * 100);
+            var cancH = Math.round(hd.cancelled / maxVal * 100);
+            var isCur = h2 === phtH, isFut = h2 > phtH;
+            bars += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0">'
+              + '<div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:60px;gap:1px;opacity:'+(isFut?'0.25':'1')+'">'
+              + (compH>0?'<div style="width:100%;height:'+compH+'%;background:'+(isCur?'var(--accent)':'var(--green)')+';border-radius:2px 2px 0 0;min-height:2px"></div>':'')
+              + (cancH>0?'<div style="width:100%;height:'+cancH+'%;background:var(--red);opacity:.7;min-height:2px"></div>':'')
+              + '</div>'
+              + '<div style="font-size:8px;color:'+(isCur?'var(--accent)':'var(--ink4)')+';font-weight:'+(isCur?'700':'400')+'">'+(h2%3===0?h2+'h':'')+'</div>'
+              + '</div>';
+          }
+          if (DB_DEMAND_HOURS.length === 0) {
+            return '<div style="height:80px;display:flex;align-items:center;justify-content:center;color:var(--ink4);font-size:11px">No demand data yet</div>';
+          }
+          return '<div style="display:flex;gap:2px;align-items:flex-end">'+bars+'</div>';
+        })();
+        var chartBlock = '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 20px;margin:0 var(--s4) 8px">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
+          +'<div style="font-size:13px;font-weight:700">Hourly Demand <span style="font-size:10px;color:var(--ink3);font-weight:400">all services · today</span></div>'
+          +'<div style="display:flex;gap:12px;font-size:10px;color:var(--ink3)">'
+          +'<span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block"></span>Completed</span>'
+          +'<span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block"></span>Cancelled</span>'
+          +'</div></div>'
+          +demandChart+'</div>';
+        return chartBlock + '<div style="display:grid;grid-template-columns:1.8fr 1.4fr 0.8fr;gap:8px;padding:var(--s4)">'+col1+col2+col3+'</div>';
 
       } else {
         // Marketplace: partner activity + marketplace drivers + alerts
-        var selVtid = {'moto-regular':'1','go-car':'2','go-suv':'3'}[sel];
+        var selVtid = {'moto-regular':'1','go-car':'2','go-suv':'3','etrike':'10'}[sel];
         var selSvcData = DB_SERVICES[selVtid]||{};
         var rid3=REGISTERED_PARTNERS[selVtid]||0, act3=Number(selSvcData.active_drivers||0);
         var actP3=rid3>0?Math.round(act3/rid3*100):0;
@@ -1966,7 +2037,7 @@ function buildCmd() {
         var ca3=Number(selSvcData.cancelled||0);
         var cp3=(t3+ca3)>0?Math.round(t3/(t3+ca3)*100):0;
         var cc3=cp3>=90?'var(--green)':cp3>=75?'var(--amber)':'var(--red)';
-        var svcLblMap={'moto-regular':'Moto Regular','go-car':'Go Car','go-suv':'Go SUV'};
+        var svcLblMap={'moto-regular':'Moto Regular','go-car':'Go Car','go-suv':'Go SUV','etrike':'e-Trike'};
         var col1='<div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
           +'<div style="font-size:14px;font-weight:700">'+svcLblMap[sel]+' Partners <span style="font-size:11px;color:var(--ink3);font-weight:400">today</span></div></div>'
           +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
@@ -1986,18 +2057,23 @@ function buildCmd() {
 
         var selMktList = DB_RIDESHARE_PERF.filter(function(d){return d.vtid===selVtid;}).slice().sort(function(a,b){return b.gtv-a.gtv;});
         var selMed = selMktList.length>0?selMktList[Math.floor(selMktList.length/2)].gtv:0;
-        var hdr3='<div style="display:grid;grid-template-columns:1fr 70px 80px 70px;padding:7px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em">'
-          +'<span>Driver</span><span style="text-align:right">Trips</span><span style="text-align:right">GTV</span><span style="text-align:right">vs avg</span></div>';
+        var hdr3='<div style="display:grid;grid-template-columns:1fr 60px 80px 80px 80px 70px;padding:7px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em">'
+          +'<span>Driver</span><span style="text-align:right">Trips</span><span style="text-align:right">GTV</span>'
+          +'<span style="text-align:right">Commission</span>'
+          +'<span style="text-align:right">Incentive</span>'
+          +'<span style="text-align:right">vs avg</span></div>';
         var dr3=selMktList.slice(0,10).map(function(d){
           var va=selMed>0?Math.round((d.gtv-selMed)/selMed*100):0;
           var vc=va>=20?'#34D399':va>=-10?'var(--ink3)':'#F59E0B';
           var vl=va>=20?'Above avg':va>=-10?'Near avg':'Below avg';
           var lb=va>=20?'rgba(52,211,153,.12)':va>=-10?'var(--surface)':'rgba(245,158,11,.12)';
-          return '<div style="display:grid;grid-template-columns:1fr 70px 80px 70px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center">'
+          return '<div style="display:grid;grid-template-columns:1fr 60px 80px 80px 80px 70px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center">'
             +'<div><div style="font-size:11px;font-weight:600">'+d.name+'</div>'
             +'<div style="font-size:9px;color:var(--ink3)">'+d.days+'d active · ₱'+d.avg_fare+' avg fare</div></div>'
             +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right">'+d.trips+'</div>'
             +'<div style="font-family:var(--f-mono);font-size:11px;font-weight:600;text-align:right">₱'+d.gtv.toLocaleString()+'</div>'
+            +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right;color:var(--green)">₱'+(d.commission||0).toLocaleString()+'</div>'
+            +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right;color:var(--amber)">'+(d.incentives>0?'₱'+(d.incentives||0).toLocaleString():'—')+'</div>'
             +'<div style="text-align:right"><span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;background:'+lb+';color:'+vc+'">'+vl+'</span></div></div>';
         }).join('');
         var mr3=selMktList.length>10?'<div style="padding:8px 12px;text-align:center;font-size:10px;color:var(--ink3)">+'+(selMktList.length-10)+' more partners</div>':'';
@@ -2250,18 +2326,23 @@ function buildCmd() {
           +'<span style="color:#F59E0B">'+driverSegments.risk.length+' at risk</span>'
           +'<span style="color:#EF4444">'+driverSegments.crit.length+' critical</span></div>';
       })() : (function(){
-        var hdr='<div style="display:grid;grid-template-columns:1fr 70px 80px 70px;padding:7px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em">'
-          +'<span>Driver</span><span style="text-align:right">Trips</span><span style="text-align:right">GTV</span><span style="text-align:right">vs avg</span></div>';
+        var hdr='<div style="display:grid;grid-template-columns:1fr 60px 80px 80px 80px 70px;padding:7px 12px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em">'
+          +'<span>Driver</span><span style="text-align:right">Trips</span><span style="text-align:right">GTV</span>'
+          +'<span style="text-align:right">Commission</span>'
+          +'<span style="text-align:right">Incentive</span>'
+          +'<span style="text-align:right">vs avg</span></div>';
         var dr=mktDrivers.list.slice(0,10).map(function(d){
           var va=mktDrivers.median>0?Math.round((d.gtv-mktDrivers.median)/mktDrivers.median*100):0;
           var vc=va>=20?'#34D399':va>=-10?'var(--ink3)':'#F59E0B';
           var vl=va>=20?'Above avg':va>=-10?'Near avg':'Below avg';
           var lb=va>=20?'rgba(52,211,153,.12)':va>=-10?'var(--surface)':'rgba(245,158,11,.12)';
-          return '<div style="display:grid;grid-template-columns:1fr 70px 80px 70px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center">'
+          return '<div style="display:grid;grid-template-columns:1fr 60px 80px 80px 80px 70px;padding:8px 12px;border-bottom:1px solid var(--border);align-items:center">'
             +'<div><div style="font-size:11px;font-weight:600">'+d.name+'</div>'
             +'<div style="font-size:9px;color:var(--ink3)">'+d.days+'d active · ₱'+d.avg_fare+' avg fare</div></div>'
             +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right">'+d.trips+'</div>'
             +'<div style="font-family:var(--f-mono);font-size:11px;font-weight:600;text-align:right">₱'+d.gtv.toLocaleString()+'</div>'
+            +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right;color:var(--green)">₱'+(d.commission||0).toLocaleString()+'</div>'
+            +'<div style="font-family:var(--f-mono);font-size:11px;text-align:right;color:var(--amber)">'+(d.incentives>0?'₱'+(d.incentives||0).toLocaleString():'—')+'</div>'
             +'<div style="text-align:right"><span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;background:'+lb+';color:'+vc+'">'+vl+'</span></div></div>';
         }).join('');
         var mr=mktDrivers.list.length>10?'<div style="padding:8px 12px;text-align:center;font-size:10px;color:var(--ink3)">+'+(mktDrivers.list.length-10)+' more partners</div>':'';
