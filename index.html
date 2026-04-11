@@ -963,7 +963,7 @@ function dbRefreshAll() {
 
   setTimeout(function() {
     if (DB_LOADING) { DB_LOADING = false; updateStaleIndicator(false); toast('Refresh timed out'); }
-  }, 20000);
+  }, 35000);
 
   dbCall('today_overview', function(data, today) {
     if (data) { DB_TODAY = data; DB_DATA_DATE = today; if (data.snapshot_time) DB_SNAPSHOT_TIME = data.snapshot_time;
