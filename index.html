@@ -2948,8 +2948,9 @@ let ASSET_FILTER_KEY = 'all';
 let ASSET_SEARCH = '';
 
 function buildAssets() {
-  var el = document.getElementById('assets-content');
+  var el = document.getElementById('asset-grid');
   if (!el) return;
+  el.style.cssText = 'display:block;width:100%;max-width:100%;';
 
   var TOTAL = ASSETS.length || 56;
   var tgt   = ASSET_ECON.daily_target;
