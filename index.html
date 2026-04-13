@@ -550,7 +550,7 @@ svg{flex-shrink:0}
     <div class="tb-pills" id="tb-pills">
       <div class="tb-pill green" id="pill-rev"><span>Today</span><span class="val" id="pill-rev-val">—</span></div>
       <div class="tb-pill" id="pill-trips"><span>Trips</span><span class="val" id="pill-trips-val">—</span></div>
-      <div class="tb-pill" id="pill-active"><span>Active</span><span class="val" id="pill-active-val">—</span></div>
+      <div class="tb-pill" id="pill-active"><span>In Trip</span><span class="val" id="pill-active-val">—</span></div>
     </div>
     <div class="tb-right">
       <div id="tb-stale">⚠ Data may be stale</div>
@@ -1031,7 +1031,8 @@ function dbRefreshAll() {
         var tv = document.getElementById('pill-trips-val');
         if (tv) tv.textContent = Number(DB_TODAY.total_trips || 0).toLocaleString();
         var av = document.getElementById('pill-active-val');
-        if (av) av.textContent = Number(DB_TODAY.active_drivers || 0).toLocaleString();
+        const inTripNow = Object.values(DB_SERVICES).reduce((s, d) => s + Number(d.in_trip_now || 0), 0);
+        if (av) av.textContent = inTripNow.toLocaleString();
       }
       if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} } }
     _done(!!data);
@@ -1690,7 +1691,8 @@ function updateTopbar() {
   const tv = document.getElementById('pill-trips-val');
   if (tv) tv.textContent = trips.toLocaleString();
   const av = document.getElementById('pill-active-val');
-  if (av) av.textContent = active;
+  const inTripNow = Object.values(DB_SERVICES).reduce((s, d) => s + Number(d.in_trip_now || 0), 0);
+  if (av) av.textContent = inTripNow.toLocaleString();
 }
 
 // ─── REFRESH BADGE ─────────────────────────────────────────────────────────────
