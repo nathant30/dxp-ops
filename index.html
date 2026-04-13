@@ -1997,7 +1997,7 @@ function buildCmd() {
           var cancH = Math.round(hd.cancelled / maxVal * 100);
           var isCur = h2 === phtH, isFut = h2 > phtH;
           var tip = h2+':00 PHT \u2014 Completed: '+hd.completed+' \u00b7 Cancelled: '+hd.cancelled+' \u00b7 Total: '+hd.total;
-          bars += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;position:relative;cursor:pointer" onmouseenter="showDemandTip(event,''+tip+'')\" onmouseleave=\"hideDemandTip()\">'
+          bars += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;position:relative;cursor:pointer" onmouseenter="showDemandTip(event,\''+tip+'\')" onmouseleave="hideDemandTip()">'
             + '<div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:60px;gap:1px;opacity:'+(isFut?'0.25':'1')+'">'
             + (compH>0?'<div style="width:100%;height:'+compH+'%;background:'+(isCur?'var(--accent)':'var(--green)')+';border-radius:2px 2px 0 0;min-height:2px"></div>':'')
             + (cancH>0?'<div style="width:100%;height:'+cancH+'%;background:var(--red);opacity:.7;min-height:2px"></div>':'')
