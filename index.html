@@ -480,7 +480,7 @@ svg{flex-shrink:0}
 .sb-th.peak{background:#0D1F3C}
 .sb-th-name{font-size:10px;font-weight:800;color:#fff}
 .sb-th-time{font-size:8px;color:rgba(255,255,255,.45);font-family:var(--f-mono)}
-.sb-th-target{font-size:8px;color:rgba(255,255,255,.35)}
+.sb-th-target{font-size:8px;color:rgba(255,255,255,.6)}
 .sb-row-label{background:var(--card);position:sticky;left:0;z-index:10;display:flex;align-items:center;gap:6px;padding:0 8px;border-bottom:1px solid var(--border);border-right:2px solid var(--navy);min-width:124px;cursor:pointer;transition:background .1s}
 .sb-row-label:hover{background:#EFF6FF}
 .sb-plate{font-family:var(--f-mono);font-size:10px;font-weight:700;letter-spacing:.3px;color:var(--ink)}
@@ -938,6 +938,7 @@ function updateStaleIndicator(loading) {
     if (stale) stale.style.display = 'none';
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin">⟳</span><span>Refreshing…</span>'; }
   } else {
+    _refreshAt2 = new Date();
     if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>Refresh</span><span id="tb-age"></span>'; updateAgeBadge(); }
   }
 }
@@ -1637,7 +1638,7 @@ function updateTopbar() {
 function updateAgeBadge() {
   const mins = Math.floor((Date.now() - _refreshAt2.getTime()) / 60000);
   const label = mins < 1 ? 'live' : mins < 60 ? mins + 'm ago' : Math.floor(mins / 60) + 'h ago';
-  const col = mins > 30 ? '#D97706' : mins > 10 ? 'rgba(255,255,255,.4)' : '#6EE7B7';
+  const col = mins > 30 ? '#D97706' : mins > 10 ? 'rgba(255,255,255,.6)' : '#6EE7B7';
   const el = document.getElementById('tb-age');
   const el2 = document.getElementById('nb-age');
   if (el) { el.textContent = label; el.style.color = col; }
@@ -1790,17 +1791,17 @@ function buildCmd() {
       <!-- 1. XPRESS REVENUE -->
       <div style="background:rgba(255,255,255,.04);padding:18px 20px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1px">Xpress Revenue</span>
+          <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:1px">Xpress Revenue</span>
           <button onclick="openServiceModal('revenue')" style="background:none;border:none;padding:0;color:rgba(255,255,255,.3);font-size:9px;cursor:pointer">View →</button>
         </div>
         <div style="font-size:28px;font-weight:800;font-family:var(--f-mono);color:#FCD34D;letter-spacing:-1px;line-height:1">₱${totRev.toLocaleString()}</div>
         <div style="margin-top:10px;display:flex;flex-direction:column;gap:4px">
           <div style="display:flex;justify-content:space-between;font-size:11px">
-            <span style="color:rgba(255,255,255,.4)">Platform GTV</span>
+            <span style="color:rgba(255,255,255,.6)">Platform GTV</span>
             <span style="color:rgba(255,255,255,.7);font-family:var(--f-mono)">₱${totGtv.toLocaleString()}</span>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:11px">
-            <span style="color:rgba(255,255,255,.4)">Daily target</span>
+            <span style="color:rgba(255,255,255,.6)">Daily target</span>
             <span style="color:${allRevPct>=100?'#34D399':'rgba(255,255,255,.7)'}">${allRevPct}% ${allRevPct>=100?'✓':''}</span>
           </div>
         </div>
@@ -1809,17 +1810,17 @@ function buildCmd() {
       <!-- 2. COMPLETED TRIPS -->
       <div style="background:rgba(255,255,255,.04);padding:18px 20px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1px">Completed Trips</span>
+          <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:1px">Completed Trips</span>
           <button onclick="openServiceModal('trips')" style="background:none;border:none;padding:0;color:rgba(255,255,255,.3);font-size:9px;cursor:pointer">View →</button>
         </div>
         <div style="font-size:28px;font-weight:800;font-family:var(--f-mono);color:#fff;letter-spacing:-1px;line-height:1">${totTrips.toLocaleString()}</div>
         <div style="margin-top:10px;display:flex;flex-direction:column;gap:4px">
           <div style="display:flex;justify-content:space-between;font-size:11px">
-            <span style="color:rgba(255,255,255,.4)">Avg fare</span>
+            <span style="color:rgba(255,255,255,.6)">Avg fare</span>
             <span style="color:rgba(255,255,255,.7);font-family:var(--f-mono)">₱${Math.round(totGtv/Math.max(totTrips,1)).toLocaleString()}</span>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:11px">
-            <span style="color:rgba(255,255,255,.4)">Active drivers</span>
+            <span style="color:rgba(255,255,255,.6)">Active drivers</span>
             <span style="color:rgba(255,255,255,.7)">${Object.values(DB_SERVICES).reduce(function(s,d){return s+Number(d.active_drivers||0);},0)}</span>
           </div>
         </div>
@@ -1828,17 +1829,17 @@ function buildCmd() {
       <!-- 3. APP COMPLETION -->
       <div style="background:rgba(255,255,255,.04);padding:18px 20px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1px">Completion Rate</span>
+          <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:1px">Completion Rate</span>
           <button onclick="openServiceModal('completion')" style="background:none;border:none;padding:0;color:rgba(255,255,255,.3);font-size:9px;cursor:pointer">View →</button>
         </div>
         <div style="font-size:28px;font-weight:800;font-family:var(--f-mono);color:${compCol};letter-spacing:-1px;line-height:1">${totCompPct}%</div>
         <div style="margin-top:10px;display:flex;flex-direction:column;gap:4px">
           <div style="display:flex;justify-content:space-between;font-size:11px">
-            <span style="color:rgba(255,255,255,.4)">Cancelled</span>
+            <span style="color:rgba(255,255,255,.6)">Cancelled</span>
             <span style="color:#F87171;font-family:var(--f-mono)">${totCancelled.toLocaleString()}</span>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:11px">
-            <span style="color:rgba(255,255,255,.4)">Total requested</span>
+            <span style="color:rgba(255,255,255,.6)">Total requested</span>
             <span style="color:rgba(255,255,255,.7);font-family:var(--f-mono)">${totDemand.toLocaleString()}</span>
           </div>
         </div>
@@ -1848,7 +1849,7 @@ function buildCmd() {
       <div style="background:rgba(255,255,255,.04);padding:18px 20px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
           <div style="display:flex;align-items:center;gap:5px">
-            <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1px">Demand</span>
+            <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:1px">Demand</span>
             <span style="font-size:8px;background:rgba(52,211,153,.15);color:#34D399;padding:1px 5px;border-radius:6px;font-weight:600">LIVE</span>
           </div>
           <button onclick="openServiceModal('demand')" style="background:none;border:none;padding:0;color:rgba(255,255,255,.3);font-size:9px;cursor:pointer">View →</button>
@@ -1857,11 +1858,11 @@ function buildCmd() {
         <div style="font-size:10px;color:rgba(255,255,255,.3);margin-top:3px;margin-bottom:8px">waiting for driver · ~30s</div>
         <div style="display:flex;flex-direction:column;gap:4px">
           <div style="display:flex;justify-content:space-between;font-size:11px">
-            <span style="color:rgba(255,255,255,.4)">Total today</span>
+            <span style="color:rgba(255,255,255,.6)">Total today</span>
             <span style="color:rgba(255,255,255,.7);font-family:var(--f-mono)">${totDemand.toLocaleString()}</span>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:11px">
-            <span style="color:rgba(255,255,255,.4)">Unfulfilled</span>
+            <span style="color:rgba(255,255,255,.6)">Unfulfilled</span>
             <span style="color:#F87171;font-family:var(--f-mono)">${totUnfulfilled.toLocaleString()} <span style="color:rgba(239,68,68,.5);font-size:10px">(${totUnfulfilledPct}%)</span></span>
           </div>
         </div>
@@ -1871,7 +1872,7 @@ function buildCmd() {
       <div style="background:rgba(255,255,255,.04);padding:18px 20px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
           <div style="display:flex;align-items:center;gap:5px">
-            <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:1px">Active Trips</span>
+            <span style="font-size:9px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:1px">Active Trips</span>
             <span style="font-size:8px;background:rgba(52,211,153,.15);color:#34D399;padding:1px 5px;border-radius:6px;font-weight:600">LIVE</span>
           </div>
           <button onclick="openServiceModal('active')" style="background:none;border:none;padding:0;color:rgba(255,255,255,.3);font-size:9px;cursor:pointer">View →</button>
@@ -1880,11 +1881,11 @@ function buildCmd() {
         <div style="font-size:10px;color:rgba(255,255,255,.3);margin-top:3px;margin-bottom:8px">driver in motion · ~30s</div>
         <div style="display:flex;flex-direction:column;gap:4px">
           <div style="display:flex;justify-content:space-between;font-size:11px">
-            <span style="color:rgba(255,255,255,.4)">Queued</span>
+            <span style="color:rgba(255,255,255,.6)">Queued</span>
             <span style="color:#C4B5FD;font-family:var(--f-mono)">${totQueued.toLocaleString()}</span>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:11px">
-            <span style="color:rgba(255,255,255,.4)">Completed today</span>
+            <span style="color:rgba(255,255,255,.6)">Completed today</span>
             <span style="color:rgba(255,255,255,.7);font-family:var(--f-mono)">${totTrips.toLocaleString()}</span>
           </div>
         </div>
@@ -1965,7 +1966,7 @@ function buildCmd() {
               +'<div style="font-size:9px;color:var(--ink3);margin-top:2px">'+a.cat+'</div></div></div>';
           }).join('');
       var col3='<div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-        +'<div style="font-size:14px;font-weight:700">Exceptions</div>'
+        +'<div style="font-size:14px;font-weight:700">Exceptions <span title="Triggered by: OR/CR expiring within 30d (yellow) or 7d (red) · Insurance expiring 30d/7d · LTFRB suspended/expiring · Completed shift missing handover-out form" style="cursor:help;font-size:11px;color:var(--ink3);border:1px solid var(--border);border-radius:50%;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;font-weight:600;vertical-align:middle">?</span></div>'
         +'<div style="display:flex;gap:4px">'
         +(critAlerts.length?'<span class="badge badge-red">'+critAlerts.length+' critical</span>':'')
         +(warnAlerts.length?'<span class="badge badge-amber">'+warnAlerts.length+' warning</span>':'')
@@ -1996,7 +1997,7 @@ function buildCmd() {
           var cancH = Math.round(hd.cancelled / maxVal * 100);
           var isCur = h2 === phtH, isFut = h2 > phtH;
           var tip = h2+':00 PHT \u2014 Completed: '+hd.completed+' \u00b7 Cancelled: '+hd.cancelled+' \u00b7 Total: '+hd.total;
-          bars += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;position:relative;cursor:default" title="'+tip+'">'
+          bars += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;position:relative;cursor:pointer" onmouseenter="showDemandTip(event,''+tip+'')\" onmouseleave=\"hideDemandTip()\">'
             + '<div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:60px;gap:1px;opacity:'+(isFut?'0.25':'1')+'">'
             + (compH>0?'<div style="width:100%;height:'+compH+'%;background:'+(isCur?'var(--accent)':'var(--green)')+';border-radius:2px 2px 0 0;min-height:2px"></div>':'')
             + (cancH>0?'<div style="width:100%;height:'+cancH+'%;background:var(--red);opacity:.7;min-height:2px"></div>':'')
@@ -2214,7 +2215,7 @@ function buildCmd() {
 
       <!-- XPRESS EARNINGS -->
         <div style="background:rgba(255,255,255,.04);padding:20px 24px">
-          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">${isCommission ? 'Xpress Commission' : 'Xpress Earnings'}${DB_SNAPSHOT_TIME ? '<span style="font-size:9px;color:rgba(255,255,255,.35);margin-left:8px;font-weight:400;text-transform:none;letter-spacing:0">as of '+DB_SNAPSHOT_TIME+'</span>' : ''}</div>
+          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">${isCommission ? 'Xpress Commission' : 'Xpress Earnings'}${DB_SNAPSHOT_TIME ? '<span style="font-size:9px;color:rgba(255,255,255,.6);margin-left:8px;font-weight:400;text-transform:none;letter-spacing:0">as of '+DB_SNAPSHOT_TIME+'</span>' : ''}</div>
           <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:#FCD34D;letter-spacing:-1px;line-height:1">${fP(rev)}</div>
           <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
             <div style="display:flex;justify-content:space-between;font-size:10px">
@@ -2233,7 +2234,7 @@ function buildCmd() {
 
       <!-- COMPLETED TRIPS -->
         <div style="background:rgba(255,255,255,.04);padding:20px 24px">
-          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Completed Trips</div>
+          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Completed Trips</div>
           <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:#fff;letter-spacing:-1px;line-height:1">${trips.toLocaleString()}</div>
           <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
             <div style="display:flex;justify-content:space-between;font-size:10px">
@@ -2255,7 +2256,7 @@ function buildCmd() {
         <div style="background:rgba(255,255,255,.04);padding:20px 24px">
           ${(() => {
             const compCol = svcCompPct >= 90 ? '#34D399' : svcCompPct >= 75 ? '#FCD34D' : '#F87171';
-            return '<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">App Completion Rate</div>'
+            return '<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">App Completion Rate</div>'
               + '<div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:' + compCol + ';letter-spacing:-1px;line-height:1">' + svcCompPct + '%</div>'
               + '<div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">'
               + '<div style="display:flex;justify-content:space-between;font-size:10px"><span style="color:rgba(255,255,255,.45)">Completed</span><span style="color:#34D399;font-weight:600">' + trips.toLocaleString() + '</span></div>'
@@ -2267,7 +2268,7 @@ function buildCmd() {
 
       <!-- DAILY TARGET -->
         <div style="background:rgba(255,255,255,.04);padding:20px 24px">
-          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Daily Target</div>
+          <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Daily Target</div>
           <div style="font-size:32px;font-weight:800;font-family:var(--f-mono);color:${pctCol};letter-spacing:-1px;line-height:1">${pct}%</div>
           <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
             <div style="display:flex;justify-content:space-between;font-size:10px">
@@ -2436,7 +2437,7 @@ function buildCmd() {
           }).join('');
 
       var col3='<div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-        +'<div style="font-size:14px;font-weight:700">Exceptions</div>'
+        +'<div style="font-size:14px;font-weight:700">Exceptions <span title="Triggered by: OR/CR expiring within 30d (yellow) or 7d (red) · Insurance expiring 30d/7d · LTFRB suspended/expiring · Completed shift missing handover-out form" style="cursor:help;font-size:11px;color:var(--ink3);border:1px solid var(--border);border-radius:50%;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;font-weight:600;vertical-align:middle">?</span></div>'
         +'<div style="display:flex;gap:4px">'
         +(critAlerts.length?'<span class="badge badge-red">'+critAlerts.length+' critical</span>':'')
         +(warnAlerts.length?'<span class="badge badge-amber">'+warnAlerts.length+' warning</span>':'')
@@ -2450,40 +2451,65 @@ function buildCmd() {
   updateTopbar();
 }
 
+function showDemandTip(e, text) {
+  var tip = document.getElementById('_demandTip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = '_demandTip';
+    tip.style.cssText = 'position:fixed;z-index:9999;background:#1e293b;color:#f1f5f9;font-size:11px;padding:6px 10px;border-radius:6px;pointer-events:none;max-width:220px;line-height:1.5;box-shadow:0 4px 12px rgba(0,0,0,.3)';
+    document.body.appendChild(tip);
+  }
+  tip.textContent = text;
+  tip.style.display = 'block';
+  tip.style.left = (e.clientX + 12) + 'px';
+  tip.style.top  = (e.clientY - 8)  + 'px';
+}
+function hideDemandTip() {
+  var tip = document.getElementById('_demandTip');
+  if (tip) tip.style.display = 'none';
+}
+
 function showDriverPerf(mode) {
   const panel = document.getElementById('driver-perf-panel');
   const topBtn = document.getElementById('dp-top-btn');
   const strBtn = document.getElementById('dp-str-btn');
   if (!panel) return;
+  var useLive = DB_FLEET_HEALTH && DB_FLEET_HEALTH.length > 0;
+  var taxiLive = useLive ? DB_FLEET_HEALTH.filter(function(d){ return d.vtid==='16'; }) : [];
   if (mode === 'top') {
     if(topBtn){topBtn.style.background='var(--accent)';topBtn.style.color='#fff';topBtn.style.borderColor='var(--accent)';}
     if(strBtn){strBtn.style.background='';strBtn.style.color='';strBtn.style.borderColor='';}
-    const drivers = D4W.slice().sort((a,b) => (b.rpd||0) - (a.rpd||0)).slice(0, 8);
-    panel.innerHTML = drivers.map((d, i) => {
-      const tier = gTier(d);
-      const tcls = 'tier-' + tier.toLowerCase().replace(/ /g, '-');
-      return `<div class="shift-item" onclick="openDriverDrawer('${d.id}')">
-        <div style="width:20px;font-size:11px;font-weight:700;color:var(--ink3)">${i===0?'🥇':i===1?'🥈':i===2?'🥉':'#'+(i+1)}</div>
-        <div style="flex:1"><div style="font-size:12px;font-weight:600">${d.name}</div><div style="font-size:10px;color:var(--ink3)">₱${(d.rph||0).toFixed(0)}/hr · ${d.att||0}% att</div></div>
-        <span class="badge ${tcls}">${tier}</span>
-        <div style="font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--green);width:55px;text-align:right">${fP(d.rpd||0)}</div>
-      </div>`;
+    var drivers = useLive
+      ? taxiLive.slice().sort(function(a,b){return (b.rev_today||0)-(a.rev_today||0);}).slice(0,8)
+      : D4W.slice().sort(function(a,b){return (b.rpd||0)-(a.rpd||0);}).slice(0,8);
+    panel.innerHTML = drivers.map(function(d, i) {
+      var name = d.name || d.name;
+      var revLabel = useLive ? fP(d.rev_today||0) : fP(d.rpd||0);
+      var subLabel = useLive ? ('₱'+(d.rev_per_shift_hr||0)+'/hr · '+(d.trips_today||0)+' trips') : ('₱'+(d.rph||0).toFixed(0)+'/hr · '+(d.att||0)+'% att');
+      var id = d.id;
+      return '<div class="shift-item" onclick="openDriverDrawer(''+id+'')">'
+        +'<div style="width:20px;font-size:11px;font-weight:700;color:var(--ink3)">'+(i===0?'🥇':i===1?'🥈':i===2?'🥉':'#'+(i+1))+'</div>'
+        +'<div style="flex:1"><div style="font-size:12px;font-weight:600">'+name+'</div><div style="font-size:10px;color:var(--ink3)">'+subLabel+'</div></div>'
+        +'<div style="font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--green);width:55px;text-align:right">'+revLabel+'</div>'
+        +'</div>';
     }).join('');
   } else {
     if(strBtn){strBtn.style.background='var(--red)';strBtn.style.color='#fff';strBtn.style.borderColor='var(--red)';}
     if(topBtn){topBtn.style.background='';topBtn.style.color='';topBtn.style.borderColor='';}
-    const struggling = D4W.slice().sort((a,b) => (a.rpd||0) - (b.rpd||0)).slice(0, 8);
+    var struggling = useLive
+      ? taxiLive.filter(function(d){return (d.trips_today||0)>0;}).slice().sort(function(a,b){return (a.rev_today||0)-(b.rev_today||0);}).slice(0,8)
+      : D4W.slice().sort(function(a,b){return (a.rpd||0)-(b.rpd||0);}).slice(0,8);
     panel.innerHTML = struggling.length === 0
       ? '<div class="empty" style="padding:16px"><div style="font-size:11px;color:var(--ink3)">No struggling drivers 🎉</div></div>'
-      : struggling.map((d, i) => {
-          const tier = gTier(d);
-          const tcls = 'tier-' + tier.toLowerCase().replace(/ /g, '-');
-          return `<div class="shift-item" onclick="openDriverDrawer('${d.id}')">
-            <div style="width:20px;font-size:11px">⚠</div>
-            <div style="flex:1"><div style="font-size:12px;font-weight:600">${d.name}</div><div style="font-size:10px;color:var(--red)">₱${(d.rpd||0).toFixed(0)}/day · ${d.att||0}% att</div></div>
-            <span class="badge ${tcls}">${tier}</span>
-            <div style="font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--red);width:55px;text-align:right">${fP(d.rpd||0)}</div>
-          </div>`;
+      : struggling.map(function(d) {
+          var revLabel = useLive ? fP(d.rev_today||0) : fP(d.rpd||0);
+          var subLabel = useLive ? ('₱'+(d.rev_per_shift_hr||0)+'/hr · '+(d.trips_today||0)+' trips') : ('₱'+(d.rpd||0).toFixed(0)+'/day · '+(d.att||0)+'% att');
+          var id = d.id;
+          return '<div class="shift-item" onclick="openDriverDrawer(''+id+'')">'
+            +'<div style="width:20px;font-size:11px">⚠</div>'
+            +'<div style="flex:1"><div style="font-size:12px;font-weight:600">'+d.name+'</div><div style="font-size:10px;color:var(--red)">'+subLabel+'</div></div>'
+            +'<div style="font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--red);width:55px;text-align:right">'+revLabel+'</div>'
+            +'</div>';
         }).join('');
   }
 }
@@ -3245,7 +3271,7 @@ function renderAssetDrawerContent(a, tab) {
         <div style="font-size:28px;font-weight:800;font-family:var(--f-mono);color:#FCD34D">${fP(rev)}</div>
         <div style="height:4px;background:rgba(255,255,255,.1);border-radius:2px;margin:8px 0 4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${pctCol};border-radius:2px"></div></div>
         <div style="font-size:10px;color:rgba(255,255,255,.5)">${pct}% of ${fP(target)} target · ${active ? '🟢 ' + active.shift_type + ' shift active' : 'No active shift'}</div></div>
-        <div style="text-align:right"><div style="font-size:30px;font-weight:800;font-family:var(--f-mono);color:${pctCol}">${pct}%</div><div style="font-size:9px;color:rgba(255,255,255,.4)">7-day: ${fP(rev7)}</div></div>
+        <div style="text-align:right"><div style="font-size:30px;font-weight:800;font-family:var(--f-mono);color:${pctCol}">${pct}%</div><div style="font-size:9px;color:rgba(255,255,255,.6)">7-day: ${fP(rev7)}</div></div>
       </div>
       <div class="kpi-row" style="margin-bottom:16px">
         ${[['Completed shifts', allSh.length], ['Avg rev/shift', fP(allSh.length ? Math.round(allSh.reduce((a, s) => a + s.gross_revenue, 0) / allSh.length) : 0)], ['Total trips', allSh.reduce((a, s) => a + s.trips, 0)]].map(([l, v]) => `<div class="kpi"><div class="kpi-label">${l}</div><div class="kpi-val">${v}</div></div>`).join('')}
@@ -4019,12 +4045,12 @@ function schedRenderQuality() {
     {name:'Handover Quality',score:q.handover,w:10,desc:'Avg handover score of assigned drivers',icon:'🔄'},
   ];
   el.innerHTML='<div style="background:linear-gradient(135deg,var(--navy),#1a2744);border-radius:var(--rxl);padding:18px 22px;margin-bottom:14px;color:#fff;display:flex;gap:20px;align-items:center">'
-    +'<div><div style="font-size:9px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.5px">Quality Score</div>'
+    +'<div><div style="font-size:9px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px">Quality Score</div>'
     +'<div style="font-size:48px;font-weight:800;font-family:var(--f-mono);color:'+qcol+';line-height:1">'+q.overall+'%</div>'
-    +'<div style="font-size:10px;color:rgba(255,255,255,.4)">'+SCHED_DATE+' · '+q.assigned+'/'+q.total+' slots</div></div>'
+    +'<div style="font-size:10px;color:rgba(255,255,255,.6)">'+SCHED_DATE+' · '+q.assigned+'/'+q.total+' slots</div></div>'
     +'<div style="flex:1;border-left:1px solid rgba(255,255,255,.1);padding-left:18px;display:grid;grid-template-columns:1fr 1fr;gap:8px">'
     +[['Predicted Rev',fP(Math.round(q.predRev))],['Filled',q.assigned+'/'+q.total],['Coverage',q.coverage+'%'],['Alerts',schedGetAlerts().filter(function(a){return a.sev==='crit';}).length+' critical']].map(function(x){
-      return '<div><div style="font-size:8px;color:rgba(255,255,255,.35);text-transform:uppercase">'+x[0]+'</div>'
+      return '<div><div style="font-size:8px;color:rgba(255,255,255,.6);text-transform:uppercase">'+x[0]+'</div>'
         +'<div style="font-size:14px;font-weight:800;font-family:var(--f-mono);color:#FCD34D">'+x[1]+'</div></div>';
     }).join('')+'</div></div>'
     +'<div class="card" style="margin-bottom:14px">'
@@ -4962,7 +4988,12 @@ function _injectCmdExtras() {
   // Add UE + crash report buttons
   var btnBar = document.createElement('div');
   btnBar.style.cssText = 'display:flex;gap:6px;justify-content:flex-end;margin-bottom:12px';
-  btnBar.innerHTML = '<button class="btn btn-s btn-xs" onclick="showUnitEconomics()">📊 Unit Economics</button><button class="btn btn-d btn-xs" onclick="showReportCrash()">🚨 Report Crash</button>';
+  if (!window.CMD_DATE_MODE) window.CMD_DATE_MODE = 'today';
+  btnBar.innerHTML = ['today','yesterday','mtd'].map(function(m){
+    var labels={today:'Today',yesterday:'Yesterday',mtd:'Month to Date'};
+    var isOn=window.CMD_DATE_MODE===m;
+    return '<button class="btn btn-s btn-xs" onclick="window.CMD_DATE_MODE=\''+m+'\';buildCmd();" style="'+(isOn?'background:var(--accent);color:#fff;border-color:var(--accent)':'')+'">'+labels[m]+'</button>';
+  }).join('');
   el.insertBefore(btnBar, el.firstChild);
   // Show open crashes if any
   if (openCrashes.length) {
@@ -6438,20 +6469,20 @@ try{updateAlertStrip();}catch(e){}
 // AUTO-REFRESH — 30s interval, no API key needed (uses edge function)
 // ═══════════════════════════════════════════════════════════════
 var _arInterval = null;
-var _arCountdown = 30;
+var _arCountdown = 300;
 var _arEnabled = false;
 var _arCountdownTimer = null;
 
 function startAutoRefresh() {
   _arEnabled = true;
-  _arCountdown = 30;
+  _arCountdown = 300;
   _updateArButton();
   // Countdown ticker (updates every second for the button label)
   _arCountdownTimer = setInterval(function() {
     _arCountdown--;
     _updateArButton();
     if (_arCountdown <= 0) {
-      _arCountdown = 30;
+      _arCountdown = 300;
       // Only refresh if not already refreshing
       const btn = document.getElementById('tb-refresh');
       if (btn && !btn.disabled) {
@@ -6479,7 +6510,7 @@ function _updateArButton() {
   if (!icon || !label || !btn) return;
   if (_arEnabled) {
     icon.textContent = '▶';
-    label.textContent = 'Auto ' + _arCountdown + 's';
+    label.textContent = (_arCountdown >= 60 ? 'Auto ' + Math.ceil(_arCountdown/60) + 'm' : 'Auto ' + _arCountdown + 's');
     btn.style.color = '#6EE7B7';
     btn.style.borderColor = 'rgba(110,231,183,.4)';
     btn.style.background = 'rgba(110,231,183,.1)';
@@ -6496,7 +6527,7 @@ function _updateArButton() {
 // Wrap dbRefreshAll (edge function path) — doRefresh no longer used for live data
 var _origDbRefreshAll = dbRefreshAll;
 dbRefreshAll = function() {
-  if (_arEnabled) { _arCountdown = 30; _updateArButton(); }
+  if (_arEnabled) { _arCountdown = 300; _updateArButton(); }
   _lastSuccessfulRefresh = Date.now();
   const stale = document.getElementById('tb-stale');
   if (stale) stale.style.display = 'none';
