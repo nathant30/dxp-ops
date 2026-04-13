@@ -2565,8 +2565,13 @@ function buildFleet() {
   var el = document.getElementById('fleet-grid');
   if (!el) return;
   el.style.cssText = 'display:block;width:100%;max-width:100%;';
+
+  // Hide legacy fbar filter pills — new design has inline controls
+  var fb = document.getElementById('fleet-fbar');
+  if (fb) fb.style.display = 'none';
+
   if (!DB_FLEET_HEALTH || DB_FLEET_HEALTH.length === 0) {
-    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--ink3)"><div style="font-size:28px;margin-bottom:10px">⟳</div><div style="font-size:13px;font-weight:600">Loading fleet data…</div></div>';
+    el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--ink3)"><div style="font-size:32px;margin-bottom:12px">⟳</div><div style="font-size:13px;font-weight:600">Loading fleet data…</div></div>';
     dbCall('fleet_supply_health', function(data) {
       if (data && data.length) {
         DB_FLEET_HEALTH = data.map(function(r) {
@@ -2578,248 +2583,316 @@ function buildFleet() {
     return;
   }
 
-  // Constants
-  var TAXI_DAILY_TARGET = 3000;
-  var REGISTERED = { '16': 56, '1': 189, '2': 111, '3': 67, '10': 46 };
-  var SVC = {
-    '16': { label: 'Taxi',         icon: '🚖', controlled: true  },
-    '1':  { label: 'Moto Regular', icon: '🛵', controlled: false },
-    '2':  { label: 'Go Car',       icon: '🚗', controlled: false },
-    '3':  { label: 'Go SUV',       icon: '🚙', controlled: false },
-    '10': { label: 'e-Trike',      icon: '🛺', controlled: false },
+  // ── Constants ────────────────────────────────────────────────────────────
+  var TAXI_TARGET  = 3000;
+  var SHIFT_HRS    = 9;
+  var REGISTERED   = { '16':56, '1':189, '2':111, '3':67, '10':46 };
+  var fP = function(n){ return '\u20b1' + Math.round(n).toLocaleString(); };
+  var fH = function(h){ return h > 0 ? h.toFixed(1) + 'h' : '\u2014'; };
+
+  // ── Lifecycle: 3-tier derived from days_active ───────────────────────────
+  function lc(d) {
+    if (d.days_active <= 14) return 'New';
+    if (d.days_active <= 45) return 'Ramping';
+    return 'Tenured';
+  }
+  var LC = {
+    'New':     { col:'#60A5FA', bg:'rgba(96,165,250,.15)'  },
+    'Ramping': { col:'#F59E0B', bg:'rgba(245,158,11,.15)'  },
+    'Tenured': { col:'#34D399', bg:'rgba(52,211,153,.15)'  },
   };
-  var LIFECYCLE_COL = {
-    'New':         { col: '#60A5FA', bg: 'rgba(96,165,250,.12)',  label: 'New'         },
-    'Ramping':     { col: '#FBBF24', bg: 'rgba(251,191,36,.12)', label: 'Ramping'     },
-    'Established': { col: '#34D399', bg: 'rgba(52,211,153,.12)', label: 'Established' },
-    'Tenured':     { col: '#A78BFA', bg: 'rgba(167,139,250,.12)',label: 'Tenured'     },
-  };
-
-  var taxiDrivers = DB_FLEET_HEALTH.filter(function(d){ return d.vtid==='16'; });
-  var mktDrivers  = DB_FLEET_HEALTH.filter(function(d){ return d.vtid!=='16'; });
-
-  if (!window.FLEET_TAXI_FILTER) window.FLEET_TAXI_FILTER = 'all';
-  var filteredTaxi = taxiDrivers;
-  if (window.FLEET_TAXI_FILTER === 'champion') filteredTaxi = taxiDrivers.filter(function(d){ return d.rev_today >= 3000; });
-  else if (window.FLEET_TAXI_FILTER === 'pro')   filteredTaxi = taxiDrivers.filter(function(d){ return d.rev_today >= 2500 && d.rev_today < 3000; });
-  else if (window.FLEET_TAXI_FILTER === 'active') filteredTaxi = taxiDrivers.filter(function(d){ return d.rev_today >= 1800 && d.rev_today < 2500; });
-  else if (window.FLEET_TAXI_FILTER === 'bench')  filteredTaxi = taxiDrivers.filter(function(d){ return d.rev_today > 0 && d.rev_today < 1200; });
-  else if (window.FLEET_TAXI_FILTER === 'risk')   filteredTaxi = taxiDrivers.filter(function(d){ return d.rev_today >= 1200 && d.rev_today < 1800; });
-
-  var tgt = TAXI_DAILY_TARGET;
-  var taxiTop    = filteredTaxi.filter(function(d){ return d.rev_today >= tgt; });
-  var taxiTrack  = filteredTaxi.filter(function(d){ return d.rev_today >= tgt*0.6 && d.rev_today < tgt; });
-  var taxiRisk   = filteredTaxi.filter(function(d){ return d.rev_today > 0 && d.rev_today < tgt*0.6; });
-  var taxiIdle   = filteredTaxi.filter(function(d){ return d.rev_today === 0; });
-
-  var mktSorted = mktDrivers.slice().sort(function(a,b){ return b.rev_mtd - a.rev_mtd; });
-  var median = mktSorted.length > 0 ? mktSorted[Math.floor(mktSorted.length/2)].rev_mtd : 0;
-  function mktLabel(d) {
-    if (d.rev_today === 0 && d.trips_mtd === 0) return { l:'Inactive',       c:'var(--ink4)',  bg:'var(--surface)' };
-    if (d.rev_today === 0)                       return { l:'Low Activity',   c:'#F59E0B',      bg:'rgba(245,158,11,.1)' };
-    if (d.rev_mtd >= median*1.3)                 return { l:'High Contrib.',  c:'#34D399',      bg:'rgba(52,211,153,.1)' };
-    if (d.rev_mtd >= median*0.7)                 return { l:'Active',         c:'#60A5FA',      bg:'rgba(96,165,250,.1)' };
-    return                                              { l:'Below Average',  c:'#FBBF24',      bg:'rgba(251,191,36,.1)' };
+  function lcTag(d) {
+    var s = LC[lc(d)] || LC['Tenured'];
+    return '<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:6px;background:'+s.bg+';color:'+s.col+'">'+lc(d)+'</span>';
   }
 
-  function lifecycleCounts(drivers) {
-    var counts = { New:0, Ramping:0, Established:0, Tenured:0 };
-    drivers.forEach(function(d){ if(counts[d.lifecycle]!==undefined) counts[d.lifecycle]++; });
-    return counts;
-  }
-  var taxiLC = lifecycleCounts(taxiDrivers);
-  var mktLC  = lifecycleCounts(mktDrivers);
-
-  var searchQ = window.FLEET_SEARCH || '';
-
-  function fP(n) { return '\u20b1' + Math.round(n).toLocaleString(); }
-  function lcBadge(lc) {
-    var s = LIFECYCLE_COL[lc] || { col:'var(--ink3)', bg:'var(--surface)', label:lc };
-    return '<span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;background:'+s.bg+';color:'+s.col+'">'+s.label+'</span>';
+  // ── Taxi status grouping ─────────────────────────────────────────────────
+  function taxiStatus(d) {
+    if (d.trips_today === 0 && d.shift_hrs_today === 0) return 'idle_off';
+    if (d.trips_today === 0 && d.shift_hrs_today  > 0) return 'idle_on';
+    var pace      = d.rev_today / d.shift_hrs_today;
+    var projected = pace * SHIFT_HRS;
+    if (projected < TAXI_TARGET * 0.5) return 'critical';
+    if (projected < TAXI_TARGET * 0.8) return 'at_risk';
+    return 'on_track';
   }
 
-  var TH = 'style="padding:6px 10px;text-align:left;font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;white-space:nowrap;background:var(--surface);border-bottom:1px solid var(--border)"';
-  var THR = 'style="padding:6px 10px;text-align:right;font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;white-space:nowrap;background:var(--surface);border-bottom:1px solid var(--border)"';
-  var THC = 'style="padding:6px 10px;text-align:center;font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;white-space:nowrap;background:var(--surface);border-bottom:1px solid var(--border)"';
-  function TD(content, extra) { return '<td style="padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle'+(extra?';'+extra:'')+'">' + content + '</td>'; }
-  function TDR(content, extra) { return '<td style="padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle;text-align:right;white-space:nowrap;font-family:var(--f-mono)'+(extra?';'+extra:'')+'">' + content + '</td>'; }
-  function TDC(content, extra) { return '<td style="padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle;text-align:center'+(extra?';'+extra:'')+'">' + content + '</td>'; }
+  var taxiAll       = DB_FLEET_HEALTH.filter(function(d){ return d.vtid==='16'; });
+  var taxiCritical  = taxiAll.filter(function(d){ return taxiStatus(d)==='critical'; })
+                             .sort(function(a,b){ return a.rev_today - b.rev_today; });
+  var taxiAtRisk    = taxiAll.filter(function(d){ return taxiStatus(d)==='at_risk'; })
+                             .sort(function(a,b){ return a.rev_today - b.rev_today; });
+  var taxiOnTrack   = taxiAll.filter(function(d){ return taxiStatus(d)==='on_track'; })
+                             .sort(function(a,b){ return b.rev_today - a.rev_today; });
+  var taxiIdleOn    = taxiAll.filter(function(d){ return taxiStatus(d)==='idle_on'; })
+                             .sort(function(a,b){ return b.shift_hrs_today - a.shift_hrs_today; });
+  var taxiIdleOff   = taxiAll.filter(function(d){ return taxiStatus(d)==='idle_off'; });
+  var taxiActive    = taxiAll.filter(function(d){ return d.trips_today > 0; });
+  var mktAll        = DB_FLEET_HEALTH.filter(function(d){ return d.vtid!=='16'; });
 
-  el.innerHTML = (function() {
-    var html = '<div style="width:100%;padding:16px 24px;box-sizing:border-box;">';
-
-    // ── 1. Supply Health Cards ────────────────────────────────────────────────
-    var summaryCards = ['16','1','2','3','10'].map(function(vtid) {
-      var s = SVC[vtid]; if(!s) return '';
-      var drivers = DB_FLEET_HEALTH.filter(function(d){ return d.vtid===vtid; });
-      var activeToday = drivers.filter(function(d){ return d.trips_today>0; }).length;
-      var reg = REGISTERED[vtid] || 0;
-      var actPct = reg>0?Math.round(activeToday/reg*100):0;
-      var lc = lifecycleCounts(drivers);
-      var health = actPct>=60?'#34D399':actPct>=30?'#F59E0B':'#EF4444';
-      return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px">'
-        +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
-        +'<span style="font-size:16px">'+s.icon+'</span>'
-        +'<div style="font-size:12px;font-weight:700">'+s.label+'</div>'
-        +(s.controlled?'<span style="font-size:8px;font-weight:600;padding:1px 5px;border-radius:4px;background:rgba(52,211,153,.15);color:#34D399;margin-left:auto">Managed</span>':'<span style="font-size:8px;font-weight:600;padding:1px 5px;border-radius:4px;background:rgba(96,165,250,.15);color:#60A5FA;margin-left:auto">Market</span>')
-        +'</div>'
-        +'<div style="font-size:22px;font-weight:700;font-family:var(--f-mono);color:'+health+'">'+activeToday+'</div>'
-        +'<div style="font-size:10px;color:var(--ink3);margin-top:2px">of '+reg+' reg \u00b7 '+actPct+'% active</div>'
-        +'<div style="height:3px;background:var(--border);border-radius:2px;margin:8px 0;overflow:hidden">'
-        +'<div style="height:100%;width:'+actPct+'%;background:'+health+';border-radius:2px"></div></div>'
-        +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
-        +(lc.New>0?'<span style="font-size:9px;color:#60A5FA">'+lc.New+' new</span>':'')
-        +(lc.Ramping>0?'<span style="font-size:9px;color:#FBBF24">'+lc.Ramping+' ramp</span>':'')
-        +(lc.Established>0?'<span style="font-size:9px;color:#34D399">'+lc.Established+' est</span>':'')
-        +(lc.Tenured>0?'<span style="font-size:9px;color:#A78BFA">'+lc.Tenured+' tenured</span>':'')
-        +'</div></div>';
-    }).join('');
-
-    html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px;">'+summaryCards+'</div>';
-
-    // ── 2. Exception Bar ──────────────────────────────────────────────────────
-    html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:10px 16px;margin-bottom:16px;display:flex;gap:20px;align-items:center;flex-wrap:wrap">'
-      +'<span style="font-size:11px;font-weight:700;color:var(--ink2)">Supply health</span>'
-      +'<span style="font-size:11px;color:#34D399">'+taxiTop.length+' taxi on target</span>'
-      +'<span style="font-size:11px;color:#F59E0B">'+taxiRisk.length+' at risk</span>'
-      +'<span style="font-size:11px;color:var(--ink3)">'+taxiIdle.length+' taxi idle today</span>'
-      +'<span style="font-size:11px;color:#60A5FA">'+mktDrivers.filter(function(d){return d.trips_today>0;}).length+' marketplace active</span>'
-      +'<span style="font-size:11px;color:var(--ink3)">'+(taxiLC.New+taxiLC.Ramping)+' new/ramping need context</span>'
+  // ── Driver card: Taxi ────────────────────────────────────────────────────
+  function taxiCard(d) {
+    var st  = taxiStatus(d);
+    var pct = Math.min(100, Math.round(d.rev_today / TAXI_TARGET * 100));
+    var elapsed   = d.shift_hrs_today;
+    var pace      = elapsed > 0 ? Math.round(d.rev_today / elapsed) : 0;
+    var proj      = pace * SHIFT_HRS;
+    var revCol    = pct >= 100 ? '#34D399' : pct >= 60 ? '#60A5FA' : pct >= 30 ? '#F59E0B' : '#EF4444';
+    var paceCol   = proj >= TAXI_TARGET ? '#34D399' : proj >= TAXI_TARGET * 0.8 ? '#F59E0B' : '#EF4444';
+    var SB = {
+      'critical': { label:'Critical',    col:'#EF4444', bg:'rgba(239,68,68,.12)'   },
+      'at_risk':  { label:'At Risk',     col:'#F59E0B', bg:'rgba(245,158,11,.12)'  },
+      'on_track': { label:'On Track',    col:'#34D399', bg:'rgba(52,211,153,.12)'  },
+      'idle_on':  { label:'Idle · Shift',col:'#EF4444', bg:'rgba(239,68,68,.12)'   },
+      'idle_off': { label:'Off Today',   col:'var(--ink3)', bg:'var(--surface)'    },
+    }[st] || { label:'\u2014', col:'var(--ink3)', bg:'var(--surface)' };
+    var leftBorder = (st==='critical'||st==='idle_on') ? 'border-left:3px solid #EF4444;'
+                   : st==='at_risk' ? 'border-left:3px solid #F59E0B;' : '';
+    return '<div onclick="openDriverDrawer(\''+d.id+'\')" style="'
+      +'background:var(--card);border:1px solid var(--border);border-radius:var(--rl);'
+      +'padding:12px 14px;cursor:pointer;'+leftBorder+'">'
+      // name + status badge
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:5px">'
+      +'<div style="font-size:13px;font-weight:700;color:var(--ink1);line-height:1.2;word-break:break-word;flex:1">'+d.name+'</div>'
+      +'<span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:6px;'
+      +'background:'+SB.bg+';color:'+SB.col+';white-space:nowrap;flex-shrink:0">'+SB.label+'</span>'
+      +'</div>'
+      // meta row
+      +'<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:8px">'
+      +lcTag(d)
+      +'<span style="font-size:9px;color:var(--ink3)">'+d.days_active+'d</span>'
+      +(elapsed > 0 ? '<span style="font-size:9px;color:var(--ink3)">\u00b7 '+fH(elapsed)+' elapsed</span>' : '')
+      +(d.trips_today > 0 ? '<span style="font-size:9px;color:var(--ink3)">\u00b7 '+d.trips_today+' trips</span>' : '')
+      +(d.avg_fare > 0 ? '<span style="font-size:9px;color:var(--ink3)">\u00b7 avg '+fP(d.avg_fare)+'</span>' : '')
+      +'</div>'
+      // body
+      +(d.trips_today > 0
+        // revenue bar
+        ? '<div style="margin-bottom:6px">'
+          +'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">'
+          +'<span style="font-size:15px;font-weight:700;font-family:var(--f-mono);color:'+revCol+'">'+fP(d.rev_today)+'</span>'
+          +'<span style="font-size:9px;color:var(--ink3)">of '+fP(TAXI_TARGET)+' \u00b7 '+pct+'%</span>'
+          +'</div>'
+          +'<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">'
+          +'<div style="height:100%;width:'+pct+'%;background:'+revCol+';border-radius:2px"></div>'
+          +'</div>'
+          +'</div>'
+          // pace row
+          +(elapsed > 0
+            ? '<div style="font-size:10px;color:var(--ink3)">'
+              +'<span style="color:'+paceCol+';font-weight:600">'+fP(pace)+'/hr</span>'
+              +' \u00b7 \u2192 '+fP(proj)+' proj'
+              +'</div>'
+            : '')
+        // idle body
+        : '<div style="font-size:11px;color:var(--ink3);font-style:italic">'
+          +(elapsed > 0 ? 'On shift \u00b7 no trips yet' : 'No activity today')
+          +'</div>'
+      )
       +'</div>';
+  }
 
-    // ── 3. Taxi · Controlled Supply ───────────────────────────────────────────
-    html += '<div style="font-size:13px;font-weight:700;margin:0 0 10px;padding:8px 12px;background:var(--surface);border-radius:var(--r);border-left:3px solid var(--accent)">'
-      +'\ud83d\ude96 Taxi \u00b7 Controlled Supply'
-      +'<span style="font-size:10px;font-weight:400;color:var(--ink3);margin-left:8px">target \u20b13,000/day \u00b7 shift-based</span>'
-      +'</div>';
+  // ── Driver card: Marketplace ─────────────────────────────────────────────
+  function mktCard(d) {
+    return '<div onclick="openDriverDrawer(\''+d.id+'\')" style="'
+      +'background:var(--card);border:1px solid var(--border);border-radius:var(--rl);'
+      +'padding:10px 12px;cursor:pointer;">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:4px;margin-bottom:5px">'
+      +'<div style="font-size:12px;font-weight:700;color:var(--ink1);flex:1;word-break:break-word">'+d.name+'</div>'
+      +lcTag(d)
+      +'</div>'
+      +'<div style="display:flex;gap:10px;align-items:flex-end">'
+      +'<div><div style="font-size:13px;font-weight:700;font-family:var(--f-mono)">'+fP(d.rev_today)+'</div>'
+      +'<div style="font-size:8px;color:var(--ink3)">GTV</div></div>'
+      +'<div><div style="font-size:13px;font-weight:700;font-family:var(--f-mono);color:#34D399">'+fP(d.commission_today)+'</div>'
+      +'<div style="font-size:8px;color:var(--ink3)">Comm.</div></div>'
+      +'<div style="margin-left:auto;text-align:right">'
+      +'<div style="font-size:13px;font-weight:700;font-family:var(--f-mono)">'+d.trips_today+'</div>'
+      +'<div style="font-size:8px;color:var(--ink3)">trips</div></div>'
+      +'</div></div>';
+  }
 
-    var taxiSegs = [
-      { label:'On target',  col:'#34D399',     bg:'rgba(52,211,153,.06)',  drivers:taxiTop,   statusLabel:'Target met' },
-      { label:'On track',   col:'#60A5FA',     bg:'rgba(96,165,250,.06)',  drivers:taxiTrack, statusLabel:'On track'   },
-      { label:'At risk',    col:'#F59E0B',     bg:'rgba(245,158,11,.06)',  drivers:taxiRisk,  statusLabel:'At risk'    },
-      { label:'Idle today', col:'var(--ink3)', bg:'transparent',            drivers:taxiIdle,  statusLabel:'No trips'   },
-    ];
-    taxiSegs.forEach(function(seg) {
-      if (seg.drivers.length === 0) return;
-      var rows = seg.drivers.slice(0,15).map(function(d) {
-        var pct = Math.min(100, Math.round(d.rev_today/tgt*100));
-        var barCol = pct>=100?'#34D399':pct>=60?'#60A5FA':'#F59E0B';
-        var bar = '<div style="display:flex;align-items:center;gap:4px;min-width:80px">'
-          +'<div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+barCol+';border-radius:2px"></div></div>'
-          +'<span style="font-size:9px;color:var(--ink3);min-width:28px;text-align:right">'+pct+'%</span></div>';
-        return '<tr>'
-          +TD('<div style="font-size:12px;font-weight:600;min-width:140px;word-break:break-word">'+d.name+'</div>'
-            +'<div style="font-size:10px;color:var(--ink3)">'+d.days_active+'d \u00b7 \u20b1'+d.avg_fare+' avg</div>')
-          +TDC(lcBadge(d.lifecycle))
-          +TDR(d.trips_today)
-          +TDR(fP(d.rev_today),'font-size:12px;font-weight:700;color:'+barCol)
-          +(function(){var STANDARD_SHIFT_HRS=9;var elapsed=d.shift_hrs_today||0;var pace=elapsed>0?Math.round(d.rev_today/elapsed):0;var projected=pace>0?Math.round(pace*STANDARD_SHIFT_HRS):0;var tgt=3000;var onTrack=projected>=tgt;var paceCol=onTrack?'var(--green)':pace>0&&projected>=tgt*0.8?'var(--amber)':'var(--red)';var rphCell=elapsed>0?'<div style="white-space:nowrap"><span style="font-weight:700;color:'+paceCol+'">₱'+pace.toLocaleString()+'/hr</span></div>'+'<div style="font-size:9px;color:var(--ink3);white-space:nowrap">→ ₱'+projected.toLocaleString()+' proj · '+elapsed.toFixed(1)+'h elapsed</div>':'<span style="color:var(--ink3)">—</span>';return TDR(rphCell,'vertical-align:middle')})()
-          +TD(bar)
-          +TDC('<span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;background:'+seg.bg+';color:'+seg.col+'">'+seg.statusLabel+'</span>')
-          +'</tr>';
-      }).join('');
-      var more = seg.drivers.length>15?'<tr><td colspan="7" style="padding:6px 10px;text-align:center;font-size:10px;color:var(--ink3);border-bottom:1px solid var(--border)">+'+(seg.drivers.length-15)+' more</td></tr>':'';
-      html += '<div style="margin-bottom:10px">'
-        +'<div style="font-size:9px;font-weight:700;color:'+seg.col+';text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;padding:3px 8px;background:'+seg.bg+';border-radius:4px;display:inline-block">'+seg.label+' \u00b7 '+seg.drivers.length+'</div>'
-        +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:auto">'
-        +'<table style="width:100%;border-collapse:collapse;table-layout:fixed;">'
-        +'<colgroup><col style="width:25%"><col style="width:12%"><col style="width:8%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:10%"></colgroup>'
-        +'<thead><tr><th '+TH+'>Driver</th><th '+THC+'>Lifecycle</th><th '+THR+'>Trips</th><th '+THR+'>Rev Today</th><th '+THR+'>Pace &amp; Projection</th><th '+TH+'>Target</th><th '+THC+'>Status</th></tr></thead>'
-        +'<tbody>'+rows+more+'</tbody></table></div></div>';
-    });
+  // ── Collapsible group section renderer ───────────────────────────────────
+  var _gc = 0;
+  function groupSection(label, col, bg, drivers, cardFn, defaultOpen) {
+    if (!drivers.length) return '';
+    var gid  = 'flg' + (++_gc);
+    var open = defaultOpen !== false;
+    return '<div style="margin-bottom:10px">'
+      // header
+      +'<div onclick="(function(){var g=document.getElementById(\''+gid+'\');'
+      +'var isOpen=g.style.display!==\'none\';g.style.display=isOpen?\'none\':\'grid\';'
+      +'document.getElementById(\''+gid+'a\').textContent=isOpen?\'\u25b8\':\'\u25be\';})()" '
+      +'style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--r);'
+      +'background:'+bg+';cursor:pointer;user-select:none;margin-bottom:6px">'
+      +'<span id="'+gid+'a" style="font-size:10px;color:'+col+'">'+(open?'\u25be':'\u25b8')+'</span>'
+      +'<span style="font-size:11px;font-weight:700;color:'+col+'">'+label+'</span>'
+      +'<span style="font-size:10px;font-weight:600;color:'+col+';opacity:.6;margin-left:2px">'+drivers.length+'</span>'
+      +'</div>'
+      // card grid
+      +'<div id="'+gid+'" style="display:'+(open?'grid':'none')
+      +';grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">'
+      +drivers.map(cardFn).join('')
+      +'</div></div>';
+  }
 
-    // ── 4. Marketplace Supply ─────────────────────────────────────────────────
-    html += '<div style="font-size:13px;font-weight:700;margin:16px 0 10px;padding:8px 12px;background:var(--surface);border-radius:var(--r);border-left:3px solid var(--accent)">'
-      +'\ud83d\udedb Marketplace Supply'
-      +'<span style="font-size:10px;font-weight:400;color:var(--ink3);margin-left:8px">contribution-based</span>'
-      +'</div>';
+  // ══════════════════════════════════════════════════════════════════════════
+  var html = '<div style="width:100%;padding:16px 24px;box-sizing:border-box;">';
 
-    if (!window.FLEET_MKT_TAB) window.FLEET_MKT_TAB = '1';
-    var MKT_TABS = [
-      { vtid:'1',  label:'\ud83d\udef5 Moto Regular' },
-      { vtid:'2',  label:'\ud83d\ude97 Go Car' },
-      { vtid:'3',  label:'\ud83d\ude99 Go SUV' },
-      { vtid:'10', label:'\ud83d\udefa e-Trike' },
-    ];
-    html += '<div style="display:flex;gap:2px;margin-bottom:12px;border-bottom:2px solid var(--border)">'
-      + MKT_TABS.map(function(t) {
-          var isOn = window.FLEET_MKT_TAB === t.vtid;
-          return '<button onclick="window.FLEET_MKT_TAB=\'' + t.vtid + '\';buildFleet();" '
-            + 'style="padding:8px 16px;border:none;background:none;cursor:pointer;font-size:12px;font-weight:'
-            + (isOn?'700':'500') + ';color:' + (isOn?'var(--accent)':'var(--ink3)')
-            + ';border-bottom:2px solid ' + (isOn?'var(--accent)':'transparent')
-            + ';margin-bottom:-2px">' + t.label + '</button>';
-        }).join('')
-      + '</div>';
+  // ── SECTION 1: Fleet Health Summary ──────────────────────────────────────
+  var totalActive   = DB_FLEET_HEALTH.filter(function(d){ return d.trips_today>0; }).length;
+  var totalNew      = DB_FLEET_HEALTH.filter(function(d){ return d.days_active<=14; }).length;
+  var totalRamping  = DB_FLEET_HEALTH.filter(function(d){ return d.days_active>14&&d.days_active<=45; }).length;
+  var kpis = [
+    { label:'Active Today',    val:totalActive,          col:'#34D399', note:DB_FLEET_HEALTH.filter(function(d){return d.trips_today>0;}).length+' drivers w/ trips'  },
+    { label:'On Track',        val:taxiOnTrack.length,   col:'#60A5FA', note:'taxi \u2265 80% target pace' },
+    { label:'At Risk',         val:taxiAtRisk.length,    col:'#F59E0B', note:'taxi 50\u201380% target pace' },
+    { label:'Critical',        val:taxiCritical.length,  col:'#EF4444', note:'taxi <50% target pace'     },
+    { label:'Idle \u00b7 Shift', val:taxiIdleOn.length,  col:'#EF4444', note:'on shift, no trips yet'    },
+    { label:'New / Ramping',   val:totalNew+totalRamping,col:'#A78BFA', note:'needs extra context'       },
+  ];
+  html += '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:20px">'
+    + kpis.map(function(k) {
+        return '<div style="background:var(--card);border:1px solid var(--border);'
+          +'border-radius:var(--rl);padding:12px 14px;border-top:3px solid '+k.col+'">'
+          +'<div style="font-size:24px;font-weight:700;font-family:var(--f-mono);color:'+k.col+';line-height:1">'+k.val+'</div>'
+          +'<div style="font-size:11px;font-weight:700;color:var(--ink1);margin-top:4px">'+k.label+'</div>'
+          +'<div style="font-size:9px;color:var(--ink3);margin-top:2px">'+k.note+'</div>'
+          +'</div>';
+      }).join('')
+    +'</div>';
 
-    (function() {
-      var vtid = window.FLEET_MKT_TAB;
-      var s = SVC[vtid]; if(!s) return;
-      var drivers = DB_FLEET_HEALTH.filter(function(d){ return d.vtid===vtid; });
-      var active = drivers.filter(function(d){ return d.trips_today>0; });
-      if (drivers.length === 0) {
-        html += '<div style="padding:20px;text-align:center;color:var(--ink3);font-size:12px;background:var(--card);border:1px solid var(--border);border-radius:var(--rl)">No drivers for this service</div>';
-        return;
-      }
-      var rows = drivers.map(function(d,i) {
-        var ml = mktLabel(d);
-        return '<tr style="'+(i%2===0?'':'background:var(--surface)')+'">'
-          +TD('<div style="font-size:12px;font-weight:600;word-break:break-word">'+d.name+'</div>'
-            +'<div style="font-size:10px;color:var(--ink3)">'+d.days_active+'d'+(d.avg_rating>0?' \u00b7 \u2b50'+d.avg_rating:'')+'</div>')
-          +TDC(lcBadge(d.lifecycle))
-          +TDR(d.trips_today)
-          +TDR(fP(d.rev_today),'font-size:12px;font-weight:700')
-          +TDR(fP(d.commission_today),'color:#34D399')
-          +TDR(d.trips_mtd,'color:var(--ink3)')
-          +TDC('<span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:10px;background:'+ml.bg+';color:'+ml.c+'">'+ml.l+'</span>')
-          +'</tr>';
-      }).join('');
-      html += '<div style="font-size:11px;color:var(--ink3);margin-bottom:6px">'+active.length+' active today \u00b7 '+drivers.length+' total</div>'
-        +'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:auto">'
-        +'<table style="width:100%;border-collapse:collapse;table-layout:fixed;">'
-        +'<colgroup><col style="width:25%"><col style="width:12%"><col style="width:8%"><col style="width:15%"><col style="width:15%"><col style="width:10%"><col style="width:15%"></colgroup>'
-        +'<thead><tr><th '+TH+'>Driver</th><th '+THC+'>Lifecycle</th><th '+THR+'>Trips</th><th '+THR+'>GTV Today</th><th '+THR+'>Commission</th><th '+THR+'>MTD Trips</th><th '+THC+'>Activity</th></tr></thead>'
-        +'<tbody>'+rows+'</tbody></table></div>';
-    })();
+  // ── SECTION 2: Controlled Supply — Taxi ──────────────────────────────────
+  html += '<div style="display:flex;align-items:center;gap:10px;margin:0 0 12px">'
+    +'<div style="font-size:13px;font-weight:700;color:var(--ink1)">\ud83d\ude96 Taxi \u00b7 Controlled Supply</div>'
+    +'<div style="font-size:10px;color:var(--ink3)">target '+fP(TAXI_TARGET)+'/day \u00b7 '+SHIFT_HRS+'h shift</div>'
+    +'<div style="margin-left:auto;display:flex;gap:6px">'
+    +(taxiCritical.length ? '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:rgba(239,68,68,.12);color:#EF4444">'+taxiCritical.length+' critical</span>' : '')
+    +(taxiAtRisk.length   ? '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:rgba(245,158,11,.12);color:#F59E0B">'+taxiAtRisk.length+' at risk</span>' : '')
+    +(taxiIdleOn.length   ? '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:rgba(239,68,68,.12);color:#EF4444">'+taxiIdleOn.length+' idle on shift</span>' : '')
+    +'</div></div>';
 
-    // ── 5. Driver Directory ───────────────────────────────────────────────────
-    html += '<div style="font-size:13px;font-weight:700;margin:16px 0 10px;padding:8px 12px;background:var(--surface);border-radius:var(--r);border-left:3px solid var(--accent)">Driver Directory</div>';
-    html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">'
-      +'<input type="text" placeholder="Search by name\u2026" value="'+searchQ.replace(/"/g,'&quot;')+'"'
-      +' oninput="window.FLEET_SEARCH=this.value;buildFleet();"'
-      +' style="flex:1;max-width:320px;padding:7px 12px;border:1px solid var(--border);border-radius:var(--rs);background:var(--surface);color:var(--ink1);font-size:12px"/>'
-      +'<div style="font-size:11px;color:var(--ink3)">'+DB_FLEET_HEALTH.length+' total drivers</div>'
-      +'</div>';
+  html += groupSection('\ud83d\udd34 Critical \u2014 Needs Immediate Attention',
+    '#EF4444', 'rgba(239,68,68,.08)', taxiCritical, taxiCard, true);
+  html += groupSection('\ud83d\udfe1 At Risk \u2014 Below Target Pace',
+    '#F59E0B', 'rgba(245,158,11,.08)', taxiAtRisk, taxiCard, true);
+  html += groupSection('\ud83d\udfe2 On Track',
+    '#34D399', 'rgba(52,211,153,.06)', taxiOnTrack, taxiCard,
+    taxiCritical.length === 0 && taxiAtRisk.length === 0);
+  html += groupSection('\u26a0\ufe0f Idle on Shift \u2014 No Trips Yet',
+    '#EF4444', 'rgba(239,68,68,.06)', taxiIdleOn, taxiCard, true);
+  html += groupSection('\u26ab Unscheduled \u2014 Off Today',
+    'var(--ink3)', 'var(--surface)', taxiIdleOff, taxiCard, false);
 
-    if (searchQ) {
-      var dirRows = DB_FLEET_HEALTH.filter(function(d){ return d.name.toLowerCase().indexOf(searchQ.toLowerCase())>=0; }).slice(0,30).map(function(d,i) {
-        var s = SVC[d.vtid] || { icon:'?', label:'?', controlled:false };
-        var ml = s.controlled
-          ? (d.rev_today>=tgt?{l:'On target',c:'#34D399',bg:'rgba(52,211,153,.1)'}:d.rev_today>=tgt*0.6?{l:'On track',c:'#60A5FA',bg:'rgba(96,165,250,.1)'}:d.rev_today>0?{l:'At risk',c:'#F59E0B',bg:'rgba(245,158,11,.1)'}:{l:'Idle',c:'var(--ink4)',bg:'var(--surface)'})
-          : mktLabel(d);
-        return '<tr style="'+(i%2===0?'':'background:var(--surface)')+'">'
-          +TD('<div style="font-size:12px;font-weight:600;min-width:140px;word-break:break-word">'+d.name+'</div>')
-          +TD('<span style="font-size:11px">'+s.icon+' '+s.label+'</span>','white-space:nowrap')
-          +TDC(lcBadge(d.lifecycle))
-          +TDR(fP(d.rev_today),'font-weight:700')
-          +TDR(fP(d.commission_today),'color:#34D399')
-          +TDR(d.trips_mtd,'color:var(--ink3)')
-          +TDR(fP(d.rev_mtd))
-          +TDC('<span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;background:'+ml.bg+';color:'+ml.c+'">'+ml.l+'</span>')
-          +'</tr>';
-      }).join('');
-      html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:auto">'
-        +'<table style="width:100%;border-collapse:collapse">'
-        +'<thead><tr><th '+TH+'>Driver</th><th '+TH+'>Service</th><th '+THC+'>Lifecycle</th><th '+THR+'>Rev Today</th><th '+THR+'>Commission</th><th '+THR+'>Trips MTD</th><th '+THR+'>Rev MTD</th><th '+THC+'>Status</th></tr></thead>'
-        +'<tbody>'+dirRows+'</tbody></table></div>';
-    } else {
-      html += '<div style="padding:20px;text-align:center;color:var(--ink3);font-size:12px;background:var(--card);border:1px solid var(--border);border-radius:var(--rl)">Type a name above to search all '+DB_FLEET_HEALTH.length+' drivers across all services</div>';
+  // ── SECTION 3: Marketplace Supply ────────────────────────────────────────
+  html += '<div style="display:flex;align-items:center;gap:10px;margin:20px 0 12px">'
+    +'<div style="font-size:13px;font-weight:700;color:var(--ink1)">\ud83d\udea6 Marketplace Supply</div>'
+    +'<div style="font-size:10px;color:var(--ink3)">commission-based \u00b7 top-third = high contribution</div>'
+    +'</div>';
+
+  if (!window.FLEET_MKT_TAB) window.FLEET_MKT_TAB = '1';
+  var MKT_TABS = [
+    { vtid:'1',  label:'\ud83d\udef5 Moto'    },
+    { vtid:'2',  label:'\ud83d\ude97 Go Car'  },
+    { vtid:'3',  label:'\ud83d\ude99 Go SUV'  },
+    { vtid:'10', label:'\ud83d\udefa e-Trike' },
+  ];
+  html += '<div style="display:flex;gap:2px;margin-bottom:14px;border-bottom:2px solid var(--border)">'
+    + MKT_TABS.map(function(t) {
+        var on = window.FLEET_MKT_TAB === t.vtid;
+        return '<button onclick="window.FLEET_MKT_TAB=\''+t.vtid+'\';buildFleet();" '
+          +'style="padding:7px 14px;border:none;background:none;cursor:pointer;font-size:12px;'
+          +'font-weight:'+(on?'700':'500')+';color:'+(on?'var(--accent)':'var(--ink3)')+';'
+          +'border-bottom:2px solid '+(on?'var(--accent)':'transparent')+';margin-bottom:-2px">'+t.label+'</button>';
+      }).join('')
+    +'</div>';
+
+  (function() {
+    var vtid    = window.FLEET_MKT_TAB;
+    var drivers = DB_FLEET_HEALTH.filter(function(d){ return d.vtid===vtid; });
+    if (!drivers.length) {
+      html += '<div style="padding:30px;text-align:center;color:var(--ink3);background:var(--card);border:1px solid var(--border);border-radius:var(--rl);font-size:12px">No data for this service</div>';
+      return;
     }
+    var active  = drivers.filter(function(d){ return d.trips_today>0; });
+    var sorted  = active.slice().sort(function(a,b){ return b.commission_today - a.commission_today; });
+    var totalGtv  = active.reduce(function(s,d){ return s+d.rev_today; }, 0);
+    var totalComm = active.reduce(function(s,d){ return s+d.commission_today; }, 0);
 
-    html += '</div>';
-    return html;
+    // Summary bar
+    html += '<div style="display:flex;gap:16px;padding:10px 16px;background:var(--card);border:1px solid var(--border);border-radius:var(--rl);margin-bottom:12px;align-items:center;flex-wrap:wrap">'
+      +'<div><div style="font-size:16px;font-weight:700;font-family:var(--f-mono);color:#34D399">'+fP(totalComm)+'</div><div style="font-size:9px;color:var(--ink3)">Commission Today</div></div>'
+      +'<div><div style="font-size:16px;font-weight:700;font-family:var(--f-mono)">'+fP(totalGtv)+'</div><div style="font-size:9px;color:var(--ink3)">GTV Today</div></div>'
+      +'<div><div style="font-size:16px;font-weight:700;font-family:var(--f-mono);color:#60A5FA">'+active.length+'</div><div style="font-size:9px;color:var(--ink3)">Active Today</div></div>'
+      +'<div><div style="font-size:16px;font-weight:700;font-family:var(--f-mono);color:var(--ink3)">'+drivers.length+'</div><div style="font-size:9px;color:var(--ink3)">Total</div></div>'
+      +'</div>';
+
+    // Groups by contribution tier (top third / middle / low / inactive)
+    var topCount    = Math.max(1, Math.ceil(sorted.length / 3));
+    var mktHigh     = sorted.slice(0, topCount);
+    var mktHighIds  = mktHigh.map(function(d){ return d.id; });
+    var mktActive   = sorted.filter(function(d){ return mktHighIds.indexOf(d.id) < 0; });
+    var mktLow      = drivers.filter(function(d){ return d.trips_today===0 && (d.rev_mtd>0||d.trips_mtd>0); });
+    var mktInactive = drivers.filter(function(d){ return d.trips_today===0 && d.rev_mtd===0 && d.trips_mtd===0; });
+
+    html += groupSection('\u2b50 High Contribution',          '#34D399', 'rgba(52,211,153,.08)',  mktHigh,     mktCard, true);
+    html += groupSection('\ud83d\udfe2 Active',               '#60A5FA', 'rgba(96,165,250,.06)',  mktActive,   mktCard, true);
+    html += groupSection('\ud83d\udfe1 Low Activity \u2014 No Trips Today', '#F59E0B', 'rgba(245,158,11,.06)', mktLow, mktCard, false);
+    html += groupSection('\u26ab Inactive',                   'var(--ink3)', 'var(--surface)',    mktInactive, mktCard, false);
   })();
+
+  // ── SECTION 4: Driver Directory (secondary) ───────────────────────────────
+  var searchQ = window.FLEET_SEARCH || '';
+  var SVC_ICO = { '16':'\ud83d\ude96','1':'\ud83d\udef5','2':'\ud83d\ude97','3':'\ud83d\ude99','10':'\ud83d\udefa' };
+  html += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border)">'
+    +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">'
+    +'<div style="font-size:12px;font-weight:700;color:var(--ink2)">Driver Directory</div>'
+    +'<input type="text" placeholder="Search '+DB_FLEET_HEALTH.length+' drivers\u2026" '
+    +'value="'+searchQ.replace(/"/g,'&quot;')+'" '
+    +'oninput="window.FLEET_SEARCH=this.value;buildFleet();" '
+    +'style="flex:1;max-width:280px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--rs);background:var(--surface);color:var(--ink1);font-size:12px"/>'
+    +'</div>';
+
+  if (searchQ.length >= 2) {
+    var results = DB_FLEET_HEALTH
+      .filter(function(d){ return d.name.toLowerCase().indexOf(searchQ.toLowerCase()) >= 0; })
+      .slice(0, 24);
+    html += results.length === 0
+      ? '<div style="padding:14px;color:var(--ink3);font-size:12px">No drivers found for \u201c'+searchQ+'\u201d</div>'
+      : '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px">'
+        + results.map(function(d) {
+            var st = d.vtid==='16' ? taxiStatus(d) : null;
+            var SB = st ? ({
+              'critical': { label:'Critical',    col:'#EF4444', bg:'rgba(239,68,68,.12)'   },
+              'at_risk':  { label:'At Risk',     col:'#F59E0B', bg:'rgba(245,158,11,.12)'  },
+              'on_track': { label:'On Track',    col:'#34D399', bg:'rgba(52,211,153,.12)'  },
+              'idle_on':  { label:'Idle\u00b7Shift', col:'#EF4444', bg:'rgba(239,68,68,.12)' },
+              'idle_off': { label:'Off',         col:'var(--ink3)', bg:'var(--surface)'    },
+            }[st]) : null;
+            return '<div onclick="openDriverDrawer(\''+d.id+'\')" '
+              +'style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:10px 12px;cursor:pointer">'
+              +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
+              +'<span style="font-size:13px">'+(SVC_ICO[d.vtid]||'?')+'</span>'
+              +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+d.name+'</div>'
+              +'<div style="font-size:9px;color:var(--ink3)">'+d.days_active+'d '+lcTag(d)+'</div></div>'
+              +(SB?'<span style="font-size:8px;font-weight:700;padding:2px 5px;border-radius:6px;background:'+SB.bg+';color:'+SB.col+'">'+SB.label+'</span>':'')
+              +'</div>'
+              +'<div style="display:flex;gap:8px">'
+              +'<div><div style="font-size:12px;font-weight:700;font-family:var(--f-mono)">'+fP(d.rev_today)+'</div><div style="font-size:8px;color:var(--ink3)">Today</div></div>'
+              +'<div><div style="font-size:12px;font-weight:700;font-family:var(--f-mono);color:var(--ink3)">'+d.trips_today+'</div><div style="font-size:8px;color:var(--ink3)">Trips</div></div>'
+              +'<div><div style="font-size:12px;font-weight:700;font-family:var(--f-mono);color:var(--ink3)">'+fP(d.rev_mtd)+'</div><div style="font-size:8px;color:var(--ink3)">MTD</div></div>'
+              +'</div></div>';
+          }).join('')
+        +'</div>';
+  } else {
+    html += '<div style="padding:12px 14px;background:var(--surface);border-radius:var(--r);font-size:11px;color:var(--ink3)">Type 2+ characters to search all '+DB_FLEET_HEALTH.length+' drivers across all services</div>';
+  }
+
+  html += '</div>'; // end directory
+  html += '</div>'; // end wrapper
+  el.innerHTML = html;
 }
+
 
 
 let SORT = { fleet: { col: 'rph', dir: 'desc' }, assets: { col: 'rev', dir: 'desc' } };
