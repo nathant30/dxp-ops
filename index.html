@@ -2469,7 +2469,7 @@ function showDriverPerf(mode) {
       var revLabel = useLive ? fP(d.rev_today||0) : fP(d.rpd||0);
       var subLabel = useLive ? ('₱'+(d.rev_per_shift_hr||0)+'/hr · '+(d.trips_today||0)+' trips') : ('₱'+(d.rph||0).toFixed(0)+'/hr · '+(d.att||0)+'% att');
       var id = d.id;
-      return '<div class="shift-item" onclick="openDriverDrawer(''+id+'')">'
+      return '<div class="shift-item" onclick="openDriverDrawer(\''+id+'\')">'
         +'<div style="width:20px;font-size:11px;font-weight:700;color:var(--ink3)">'+(i===0?'🥇':i===1?'🥈':i===2?'🥉':'#'+(i+1))+'</div>'
         +'<div style="flex:1"><div style="font-size:12px;font-weight:600">'+name+'</div><div style="font-size:10px;color:var(--ink3)">'+subLabel+'</div></div>'
         +'<div style="font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--green);width:55px;text-align:right">'+revLabel+'</div>'
@@ -2487,7 +2487,7 @@ function showDriverPerf(mode) {
           var revLabel = useLive ? fP(d.rev_today||0) : fP(d.rpd||0);
           var subLabel = useLive ? ('₱'+(d.rev_per_shift_hr||0)+'/hr · '+(d.trips_today||0)+' trips') : ('₱'+(d.rpd||0).toFixed(0)+'/day · '+(d.att||0)+'% att');
           var id = d.id;
-          return '<div class="shift-item" onclick="openDriverDrawer(''+id+'')">'
+          return '<div class="shift-item" onclick="openDriverDrawer(\''+id+'\')">'
             +'<div style="width:20px;font-size:11px">⚠</div>'
             +'<div style="flex:1"><div style="font-size:12px;font-weight:600">'+d.name+'</div><div style="font-size:10px;color:var(--red)">'+subLabel+'</div></div>'
             +'<div style="font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--red);width:55px;text-align:right">'+revLabel+'</div>'
