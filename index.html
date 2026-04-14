@@ -1020,7 +1020,7 @@ function dbRefreshAll() {
   DB_LOADING = true;
   updateStaleIndicator(true);
 
-  var _pending = 7;
+  var _pending = 8;
   var _anyData = false;
   function _done(gotData) {
     if (gotData) _anyData = true;
@@ -1159,34 +1159,34 @@ function dbRefreshAll() {
     }
     _done(!!(data && data.length));
   });
-  if (CUR_S === 'fleet') {
-    dbCall('fleet_supply_health', function(data) {
-      if (data && data.length) {
-        DB_FLEET_HEALTH = data.map(function(r) {
-          return {
-            vtid:            String(r.vehicle_type_id || ''),
-            id:              String(r.driver_id || ''),
-            name:            String(r.driver_name || 'Driver'),
-            lifecycle:       String(r.lifecycle || 'Unknown'),
-            days_active:     Number(r.days_since_activation || 0),
-            trips_today:     Number(r.trips_today || 0),
-            rev_today:       Number(r.rev_today || 0),
-            commission_today:Number(r.commission_today || 0),
-            trips_mtd:       Number(r.trips_mtd || 0),
-            rev_mtd:         Number(r.rev_mtd || 0),
-            shift_hrs_today:   Number(r.shift_hrs_today   || 0),
-            in_trip_hrs_today: Number(r.in_trip_hrs_today  || 0),
-            avg_fare:          Number(r.avg_fare_today || 0),
-            incentives_mtd:    Number(r.incentives_mtd || 0),
-            avg_rating:        Number(r.avg_rating || 0),
-            rev_per_shift_hr:  Number(r.shift_hrs_today) > 0
-              ? Math.round(Number(r.rev_today) / Number(r.shift_hrs_today)) : 0,
-          };
-        });
-      }
-      _done(!!(data && data.length));
-    });
-  }
+  dbCall('fleet_supply_health', function(data) {
+    if (data && data.length) {
+      DB_FLEET_HEALTH = data.map(function(r) {
+        return {
+          vtid:            String(r.vehicle_type_id || ''),
+          id:              String(r.driver_id || ''),
+          name:            String(r.driver_name || 'Driver'),
+          lifecycle:       String(r.lifecycle || 'Unknown'),
+          days_active:     Number(r.days_since_activation || 0),
+          trips_today:     Number(r.trips_today || 0),
+          rev_today:       Number(r.rev_today || 0),
+          commission_today:Number(r.commission_today || 0),
+          trips_mtd:       Number(r.trips_mtd || 0),
+          rev_mtd:         Number(r.rev_mtd || 0),
+          shift_hrs_today:   Number(r.shift_hrs_today   || 0),
+          in_trip_hrs_today: Number(r.in_trip_hrs_today  || 0),
+          avg_fare:          Number(r.avg_fare_today || 0),
+          incentives_mtd:    Number(r.incentives_mtd || 0),
+          avg_rating:        Number(r.avg_rating || 0),
+          rev_per_shift_hr:  Number(r.shift_hrs_today) > 0
+            ? Math.round(Number(r.rev_today) / Number(r.shift_hrs_today)) : 0,
+        };
+      });
+      if (CUR_S === 'fleet') buildFleet();
+      if (CUR_S === 'perf')  buildPerformance();
+    }
+    _done(!!(data && data.length));
+  });
   if (CUR_S === 'assets') {
     _pending++;
     dbCall('asset_mtd', function(data) {
@@ -4303,7 +4303,7 @@ const _exp = {
   ackBrief, showCheckinForm, saveCheckin, showIncidentForm, saveIncident, resolveIncident, renderFleetMgmtTab, showSwapMember,
   updateSwapTargetDrivers, executeSwap, showAddToPod, addMemberToPod, removePodMember,
   buildPerformance, setPerfTab, showPerfConfig, savePerfConfig,
-  setPerfSvc, togglePerfEcon, togglePerfAll,
+  setPerfSvc, togglePerfEcon, togglePerfAll, setPerfDetailTab,
 };;;;;;
 try { Object.assign(window, _exp); } catch(e) { document.body.innerHTML = '<div style="padding:20px;background:#FEF2F2;color:#991B1B;font-family:monospace">Boot error: ' + e.message + '</div>'; }
 
@@ -7882,9 +7882,10 @@ try{_injectViewToggle('fleet');}catch(e){}
 var PERF_CONFIG = (function(){
   try { return JSON.parse(lsGet('PERF_CONFIG') || '{}'); } catch(e){ return {}; }
 })();
-var PERF_ECON_OPEN  = false;
-var PERF_SHOW_ALL   = false;
-var PERF_SVC_FILTER = 'all';
+var PERF_ECON_OPEN    = false;
+var PERF_SHOW_ALL     = false;
+var PERF_SVC_FILTER   = 'all';
+var PERF_DETAIL_TAB   = 'drivers';
 
 function _perfCfg(k, def) {
   return (PERF_CONFIG[k] !== undefined && PERF_CONFIG[k] !== '') ? Number(PERF_CONFIG[k]) : def;
@@ -7892,8 +7893,9 @@ function _perfCfg(k, def) {
 
 function setPerfTab() {}  // no-op stub — tabs removed, kept for _exp compat
 function setPerfSvc(s)   { PERF_SVC_FILTER = s; buildPerformance(); }
-function togglePerfEcon(){ PERF_ECON_OPEN  = !PERF_ECON_OPEN;  buildPerformance(); }
-function togglePerfAll() { PERF_SHOW_ALL   = !PERF_SHOW_ALL;   buildPerformance(); }
+function togglePerfEcon()      { PERF_ECON_OPEN    = !PERF_ECON_OPEN;  buildPerformance(); }
+function togglePerfAll()       { PERF_SHOW_ALL     = !PERF_SHOW_ALL;   buildPerformance(); }
+function setPerfDetailTab(t)   { PERF_DETAIL_TAB   = t;                 buildPerformance(); }
 
 // ── Config modal ──────────────────────────────────────────────────────────────
 function _pcfgInput(label, key, val, oninput) {
@@ -7905,25 +7907,24 @@ function _pcfgInput(label, key, val, oninput) {
 
 function _perfCfgUpdateTotal() {
   function v(id) { var e = document.getElementById(id); return e ? Number(e.value) || 0 : 0; }
-  var amQty = v('pcfg-taxi_am_qty');
-  var pmQty = v('pcfg-taxi_pm_qty');
-  var tr    = v('pcfg-taxi_rev_per_shift');
-  var mq    = v('pcfg-moto_qty');
-  var mr    = v('pcfg-moto_rev_per_shift');
-  var amFleet   = amQty * tr;
-  var pmFleet   = pmQty * tr;
-  var motoFleet = mq * mr;
-  var total     = amFleet + pmFleet + motoFleet;
+  var amQty    = v('pcfg-taxi_am_qty');
+  var pmQty    = v('pcfg-taxi_pm_qty');
+  var tr       = v('pcfg-taxi_rev_per_shift');
+  var motoAmQty= v('pcfg-moto_am_qty');
+  var motoPmQty= v('pcfg-moto_pm_qty');
+  var mr       = v('pcfg-moto_rev_per_shift');
+  var taxiFleet = (amQty + pmQty) * tr;
+  var motoFleet = (motoAmQty + motoPmQty) * mr;
+  var total     = taxiFleet + motoFleet;
   var el = document.getElementById('pcfg-fleet-total');
   if (el) el.innerHTML =
-    'AM: <strong>' + amQty + '</strong> \u00d7 \u20b1' + tr.toLocaleString() + ' = <strong>\u20b1' + amFleet.toLocaleString() + '</strong>'
-    + ' &nbsp;\u00b7&nbsp; PM: <strong>' + pmQty + '</strong> \u00d7 \u20b1' + tr.toLocaleString() + ' = <strong>\u20b1' + pmFleet.toLocaleString() + '</strong>'
-    + ' &nbsp;\u00b7&nbsp; Moto: <strong>\u20b1' + motoFleet.toLocaleString() + '</strong>'
+    'Taxi AM: <strong>' + amQty + '</strong> PM: <strong>' + pmQty + '</strong> \u00d7 \u20b1' + tr.toLocaleString() + ' = <strong>\u20b1' + taxiFleet.toLocaleString() + '</strong>'
+    + ' &nbsp;\u00b7&nbsp; Moto AM: <strong>' + motoAmQty + '</strong> PM: <strong>' + motoPmQty + '</strong> \u00d7 \u20b1' + mr.toLocaleString() + ' = <strong>\u20b1' + motoFleet.toLocaleString() + '</strong>'
     + '<br>Combined daily target = <strong style="color:var(--accent)">\u20b1' + total.toLocaleString() + '/day</strong>';
   var avgFareLive = Number(((window.DB_SERVICES || {})['16'] || {}).avg_fare || 0)
     || Number(((window.DB_TODAY) || {}).avg_fare || 0) || 0;
   var shiftCost = v('pcfg-driver_shift_cost') || 1432;
-  var bep = avgFareLive > 0 ? Math.ceil(shiftCost / avgFareLive) : '—';
+  var bep = avgFareLive > 0 ? Math.ceil(shiftCost / avgFareLive) : '\u2014';
   var bepEl = document.getElementById('pcfg-bep-display');
   if (bepEl) bepEl.innerHTML = '\u20b1' + shiftCost + ' shift cost \u00f7 \u20b1' + (avgFareLive || '?') + ' avg fare = <strong>' + bep + ' trips</strong>'
     + (avgFareLive > 0 ? ' <span style="background:#22C55E;color:#fff;font-size:10px;padding:1px 5px;border-radius:10px">Live</span>' : '');
@@ -7932,23 +7933,28 @@ function _perfCfgUpdateTotal() {
 function showPerfConfig() {
   var c = PERF_CONFIG;
   function val(k, def) { return c[k] !== undefined ? c[k] : def; }
-  var amQty      = val('taxi_am_qty', '');
-  var pmQty      = val('taxi_pm_qty', '');
-  var motoQty    = val('moto_qty', '');
-  var taxiRev    = val('taxi_rev_per_shift', 2600);
-  var taxiHrs    = val('taxi_shift_hrs', 9);
-  var motoRev    = val('moto_rev_per_shift', 1200);
-  var motoHrs    = val('moto_shift_hrs', 9);
-  var gocarTrips = val('gocar_trips_target', 20);
-  var gosuvTrips = val('gosuv_trips_target', 10);
-  var commPct    = val('commission_pct_target', 20);
-  var utilPct    = val('util_target', 70);
-  var shiftCost  = val('driver_shift_cost', 1432);
+  var amQty       = val('taxi_am_qty', '');
+  var pmQty       = val('taxi_pm_qty', '');
+  var taxiRev     = val('taxi_rev_per_shift', 2600);
+  var taxiHrs     = val('taxi_shift_hrs', 9);
+  var motoAmQty   = val('moto_am_qty', '');
+  var motoPmQty   = val('moto_pm_qty', '');
+  var motoRev     = val('moto_rev_per_shift', 1200);
+  var motoHrs     = val('moto_shift_hrs', 9);
+  var gocarTrips  = val('gocar_trips_target', 20);
+  var gosuvTrips  = val('gosuv_trips_target', 10);
+  var motoTrips   = val('moto_trips_target', 50);
+  var etrikeTrips = val('etrike_trips_target', 30);
+  var commPct     = val('commission_pct_target', 20);
+  var podRevTgt   = val('pod_rev_target', 2600);
+  var assetDlyTgt = val('asset_daily_target', 3000);
+  var utilPct     = val('util_target', 70);
+  var shiftCost   = val('driver_shift_cost', 1432);
   var upd = '_perfCfgUpdateTotal()';
   var sep = '<div style="grid-column:1/-1;border-top:1px solid var(--border);margin:4px 0"></div>';
   var sh  = 'font-size:11px;font-weight:600;color:var(--text);grid-column:1/-1;margin-top:4px;margin-bottom:2px';
   var body = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">'
-    + '<div style="' + sh + '">Taxi \u2014 Salaried (per shift)</div>'
+    + '<div style="' + sh + '">\ud83d\ude95 Taxi \u2014 Salaried (per shift)</div>'
     + _pcfgInput('AM Shift Drivers', 'taxi_am_qty', amQty, upd)
     + _pcfgInput('PM Shift Drivers', 'taxi_pm_qty', pmQty, upd)
     + _pcfgInput('Rev Target / Shift (\u20b1)', 'taxi_rev_per_shift', taxiRev, upd)
@@ -7956,21 +7962,30 @@ function showPerfConfig() {
     + '<div style="grid-column:span 2"></div>'
     + _pcfgInput('Shift Hours (Taxi)', 'taxi_shift_hrs', taxiHrs, '')
     + sep
-    + '<div style="' + sh + '">Moto Taxi \u2014 Salaried</div>'
-    + _pcfgInput('Qty on Fleet', 'moto_qty', motoQty, upd)
+    + '<div style="' + sh + '">\ud83d\udef5 Moto Taxi \u2014 Salaried (per shift)</div>'
+    + _pcfgInput('AM Shift Drivers', 'moto_am_qty', motoAmQty, upd)
+    + _pcfgInput('PM Shift Drivers', 'moto_pm_qty', motoPmQty, upd)
     + _pcfgInput('Rev Target / Shift (\u20b1)', 'moto_rev_per_shift', motoRev, upd)
-    + _pcfgInput('Shift Hours', 'moto_shift_hrs', motoHrs, '')
+    + '<div style="grid-column:span 2"></div>'
+    + _pcfgInput('Shift Hours (Moto)', 'moto_shift_hrs', motoHrs, '')
     + sep
-    + '<div style="' + sh + '">Rideshare Targets</div>'
+    + '<div style="' + sh + '">\ud83d\ude97 Rideshare Targets</div>'
     + _pcfgInput('Go Car Trips/Day', 'gocar_trips_target', gocarTrips, '')
     + _pcfgInput('Go SUV Trips/Day', 'gosuv_trips_target', gosuvTrips, '')
+    + _pcfgInput('Moto Trips/Day', 'moto_trips_target', motoTrips, '')
+    + _pcfgInput('e-Trike Trips/Day', 'etrike_trips_target', etrikeTrips, '')
+    + _pcfgInput('Commission Target (%)', 'commission_pct_target', commPct, '')
+    + '<div></div>'
+    + sep
+    + '<div style="' + sh + '">Pod & Asset KPIs</div>'
+    + _pcfgInput('Pod Rev Target / Driver (\u20b1)', 'pod_rev_target', podRevTgt, '')
+    + _pcfgInput('Daily Asset Rev Target (\u20b1)', 'asset_daily_target', assetDlyTgt, '')
     + '<div></div>'
     + sep
     + '<div style="' + sh + '">Operations</div>'
     + _pcfgInput('Driver Shift Cost (\u20b1)', 'driver_shift_cost', shiftCost, upd)
     + '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">BEP (auto-computed)</label>'
     + '<div id="pcfg-bep-display" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--muted)">\u2014</div></div>'
-    + _pcfgInput('Commission Target (%)', 'commission_pct_target', commPct, '')
     + _pcfgInput('Utilization Target (%)', 'util_target', utilPct, '')
     + '</div>';
   var footer = '<button class="btn btn-s" onclick="closeModal()">Cancel</button>'
@@ -7980,9 +7995,11 @@ function showPerfConfig() {
 }
 
 function savePerfConfig() {
-  ['taxi_am_qty','taxi_pm_qty','moto_qty','taxi_rev_per_shift','taxi_shift_hrs',
-   'moto_rev_per_shift','moto_shift_hrs','gocar_trips_target','gosuv_trips_target',
-   'driver_shift_cost','commission_pct_target','util_target'].forEach(function(k) {
+  ['taxi_am_qty','taxi_pm_qty','taxi_rev_per_shift','taxi_shift_hrs',
+   'moto_am_qty','moto_pm_qty','moto_rev_per_shift','moto_shift_hrs',
+   'gocar_trips_target','gosuv_trips_target','moto_trips_target','etrike_trips_target',
+   'commission_pct_target','pod_rev_target','asset_daily_target',
+   'driver_shift_cost','util_target'].forEach(function(k) {
     var el = document.getElementById('pcfg-' + k);
     if (el) PERF_CONFIG[k] = el.value;
   });
@@ -7991,6 +8008,12 @@ function savePerfConfig() {
   var sc = _perfCfg('driver_shift_cost', 1432);
   PERF_CONFIG.bep_trips = avgFareLive > 0 ? Math.ceil(sc / avgFareLive) : (PERF_CONFIG.bep_trips || 8);
   try { lsSet('PERF_CONFIG', JSON.stringify(PERF_CONFIG)); } catch(e) {}
+  // Sync asset_daily_target → ASET.defaultTarget
+  var adtVal = Number(PERF_CONFIG.asset_daily_target);
+  if (adtVal > 0 && typeof ASET !== 'undefined') {
+    ASET.defaultTarget = adtVal;
+    try { lsSet('dxp_aset', ASET); } catch(e) {}
+  }
   closeModal();
   buildPerformance();
 }
@@ -8059,21 +8082,22 @@ function buildPerformance() {
   var taxiRevTgt = _perfCfg('taxi_rev_per_shift', 2600);
   var taxiAmQty  = _perfCfg('taxi_am_qty', 0);
   var taxiPmQty  = _perfCfg('taxi_pm_qty', 0);
-  var motoQty    = _perfCfg('moto_qty', 0);
+  var motoAmQty  = _perfCfg('moto_am_qty', 0);
+  var motoPmQty  = _perfCfg('moto_pm_qty', 0);
   var motoRevTgt = _perfCfg('moto_rev_per_shift', 1200);
   var fleetTaxiTgt = (taxiAmQty + taxiPmQty) * taxiRevTgt;
-  var fleetMotoTgt = motoQty * motoRevTgt;
+  var fleetMotoTgt = (motoAmQty + motoPmQty) * motoRevTgt;
   var fleetSalTgt  = fleetTaxiTgt + fleetMotoTgt;
 
   // ── Service filter bar ────────────────────────────────────────────────────
   var filterBar = '<div style="display:flex;gap:6px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--card);flex-wrap:wrap">'
-    + [{ id:'all', label:'All Services' }].concat(_PERF_SVCS.filter(function(s){ return Number((svc[s.vtid]||{}).trips||0) > 0 || s.vtid==='16'; }))
+    + [{ vtid:'all', name:'All Services' }].concat(_PERF_SVCS.filter(function(s){ return Number((svc[s.vtid]||{}).trips||0) > 0 || s.vtid==='16'; }))
       .map(function(s) {
-        var on = PERF_SVC_FILTER === s.id;
-        return '<button onclick="setPerfSvc(\'' + s.id + '\')" style="padding:4px 12px;border-radius:20px;border:1px solid '
+        var on = PERF_SVC_FILTER === s.vtid;
+        return '<button onclick="setPerfSvc(\'' + s.vtid + '\')" style="padding:4px 12px;border-radius:20px;border:1px solid '
           + (on ? 'var(--accent)' : 'var(--border)') + ';background:' + (on ? 'var(--accent)' : 'transparent')
           + ';color:' + (on ? '#fff' : 'var(--muted)') + ';font-size:12px;font-weight:' + (on ? '600' : '400') + ';cursor:pointer">'
-          + (s.icon ? s.icon + ' ' : '') + s.label + '</button>';
+          + (s.icon ? s.icon + ' ' : '') + s.name + '</button>';
       }).join('')
     + '</div>';
 
@@ -8118,13 +8142,19 @@ function buildPerformance() {
          + ' \u00b7 target \u20b1' + revTarget.toLocaleString() + '</div>'
        : '<div style="margin-top:4px">' + varStr + '</div>')
     + '</div>'
-    // Right — 4 chips
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-content:start;flex-shrink:0">'
-    + _heroChip('Trips',          totalTrips.toLocaleString())
-    + _heroChip('Active Drivers', totalActive.toLocaleString())
-    + _heroChip('Completion', pCompRate + '%', pCompRate >= 85 ? '#22C55E' : pCompRate >= 70 ? '#F59E0B' : '#EF4444')
-    + _heroChip('Avg Fare',   pAvgFare > 0 ? '\u20b1' + Math.round(pAvgFare) : '\u2014')
-    + '</div>'
+    // Right — 6 chips (3×2)
+    + (function(){
+        var qNow = Object.values(window.DB_QUEUED_NOW  || {}).reduce(function(s,v){ return s + Number(v||0); }, 0);
+        var iNow = Object.values(window.DB_IN_TRIP_NOW || {}).reduce(function(s,v){ return s + Number(v||0); }, 0);
+        return '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-content:start;flex-shrink:0">'
+          + _heroChip('Trips',          totalTrips.toLocaleString())
+          + _heroChip('Active Drivers', totalActive.toLocaleString())
+          + _heroChip('Queued Now',     qNow.toLocaleString(), qNow > 30 ? '#F59E0B' : '#fff')
+          + _heroChip('Completion', pCompRate + '%', pCompRate >= 85 ? '#22C55E' : pCompRate >= 70 ? '#F59E0B' : '#EF4444')
+          + _heroChip('Avg Fare',   pAvgFare > 0 ? '\u20b1' + Math.round(pAvgFare) : '\u2014')
+          + _heroChip('In Trip Now',    iNow.toLocaleString(), iNow > 0 ? '#22C55E' : '#fff')
+          + '</div>';
+      })()
     + '</div>'
     + '</div>';
 
@@ -8221,23 +8251,35 @@ function buildPerformance() {
         + (PERF_SHOW_ALL ? '\u25b2 Show less' : '\u25bc Show all ' + activeFleet.length + ' drivers') + '</button></div>' : '');
   }
 
-  var section2 = '<div style="display:flex;border-bottom:2px solid var(--border)">'
-    // Left 60%
-    + '<div style="flex:3;border-right:1px solid var(--border);min-width:0;overflow:auto">'
-    + '<div style="padding:9px 14px;font-size:12px;font-weight:600;border-bottom:1px solid var(--border);background:var(--surface);display:flex;justify-content:space-between;align-items:center">'
-    + '<span>Active Drivers <span style="font-weight:400;color:var(--muted)">(' + (fleet.length > 0 ? activeFleet.length : '\u2026') + ')</span></span>'
-    + (fleet.length > 0 ? '<span style="font-size:11px;color:var(--muted)">' + filtFleet.length + ' on fleet</span>' : '')
-    + '</div>'
-    + driverContent
-    + '</div>'
-    // Right 40%
-    + '<div style="flex:2;min-width:0">'
-    + '<div style="padding:9px 14px;font-size:12px;font-weight:600;border-bottom:1px solid var(--border);background:var(--surface)">Shift Summary</div>'
-    + _buildShiftSummary(taxiFleet, taxiRevTgt, shiftHrs)
-    + '<div style="padding:9px 14px;font-size:12px;font-weight:600;border-bottom:1px solid var(--border);border-top:1px solid var(--border);background:var(--surface);margin-top:1px">Pods</div>'
-    + _buildPodSummary(taxiFleet, taxiRevTgt, shiftHrs)
-    + '</div>'
+  // ── Section 2 tab content ─────────────────────────────────────────────────
+  var pods = window.PODS || {};
+  var podCount = Object.keys(pods).length;
+  var assetCount = Object.keys(window.DB_ASSET_MTD || {}).length || (window.ASSETS || []).filter(function(a){ return a.vehicle_id; }).length;
+
+  var tabBar = '<div style="display:flex;border-bottom:1px solid var(--border);background:var(--surface)">'
+    + ['drivers','pods','assets'].map(function(t) {
+        var label = t === 'drivers' ? 'Active Drivers (' + (fleet.length > 0 ? activeFleet.length : '\u2026') + ')'
+                  : t === 'pods'    ? 'Pods (' + podCount + ')'
+                  : 'Asset Leaderboard';
+        var active = PERF_DETAIL_TAB === t;
+        return '<button onclick="setPerfDetailTab(\'' + t + '\')" style="padding:8px 14px;font-size:12px;font-weight:' + (active ? '600' : '400') + ';border:none;background:' + (active ? 'var(--card)' : 'transparent') + ';border-bottom:2px solid ' + (active ? 'var(--accent)' : 'transparent') + ';cursor:pointer;color:' + (active ? 'var(--accent)' : 'var(--muted)') + ';white-space:nowrap">' + label + '</button>';
+      }).join('')
     + '</div>';
+
+  var tabContent;
+  if (PERF_DETAIL_TAB === 'pods') {
+    tabContent = _buildPodSummary(taxiFleet, shiftHrs);
+  } else if (PERF_DETAIL_TAB === 'assets') {
+    tabContent = _buildAssetLeaderboard();
+  } else {
+    tabContent = '<div style="padding:9px 14px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface);display:flex;justify-content:space-between;align-items:center">'
+      + (fleet.length > 0 ? '<span>' + filtFleet.length + ' on fleet · sorted by projected revenue</span>' : '<span>Waiting for driver data\u2026</span>')
+      + (fleet.length > 0 ? '<span style="font-size:11px;color:var(--muted)">' + _buildShiftSummaryInline(taxiFleet) + '</span>' : '')
+      + '</div>'
+      + driverContent;
+  }
+
+  var section2 = '<div style="border-bottom:2px solid var(--border)">' + tabBar + tabContent + '</div>';
 
   // ── Section 3: Economics (collapsible) ────────────────────────────────────
   var shiftCostCfg = _perfCfg('driver_shift_cost', 1432);
@@ -8260,8 +8302,8 @@ function buildPerformance() {
     + '<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px">Fleet Daily Target</div>'
     + '<div style="font-size:28px;font-weight:700;color:var(--text)">' + (fleetSalTgt > 0 ? '\u20b1' + fleetSalTgt.toLocaleString() : '\u2014') + '</div>'
     + '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">'
-    + 'AM: ' + taxiAmQty + ' \u00d7 \u20b1' + taxiRevTgt.toLocaleString() + ' = \u20b1' + (taxiAmQty * taxiRevTgt).toLocaleString() + '<br>'
-    + 'PM: ' + taxiPmQty + ' \u00d7 \u20b1' + taxiRevTgt.toLocaleString() + ' = \u20b1' + (taxiPmQty * taxiRevTgt).toLocaleString()
+    + 'Taxi AM: ' + taxiAmQty + ' PM: ' + taxiPmQty + ' \u00d7 \u20b1' + taxiRevTgt.toLocaleString() + ' = \u20b1' + ((taxiAmQty + taxiPmQty) * taxiRevTgt).toLocaleString() + '<br>'
+    + 'Moto AM: ' + motoAmQty + ' PM: ' + motoPmQty + ' \u00d7 \u20b1' + motoRevTgt.toLocaleString() + ' = \u20b1' + ((motoAmQty + motoPmQty) * motoRevTgt).toLocaleString()
     + '</div>'
     + (fleetSalTgt > 0 ? _pBar(totalRev, fleetSalTgt) : '<div style="font-size:11px;color:var(--muted);margin-top:6px">Set driver qty in \u2699\ufe0f Targets</div>')
     + '</div>'
@@ -8352,11 +8394,12 @@ function _buildShiftSummary(taxiDrivers, revTarget, shiftHrs) {
   return html;
 }
 
-function _buildPodSummary(taxiDrivers, revTarget, shiftHrs) {
+function _buildPodSummary(taxiDrivers, shiftHrs) {
   var pods = window.PODS || {};
   var podIds = Object.keys(pods);
+  var podRevTarget = _perfCfg('pod_rev_target', 2600);
   if (podIds.length === 0) {
-    return '<div style="padding:10px 14px;font-size:12px;color:var(--muted)">No pods configured</div>';
+    return '<div style="padding:20px 14px;font-size:12px;color:var(--muted);text-align:center">No pods configured<br><span style="font-size:11px">Configure pods in the Pods section</span></div>';
   }
   var rows = podIds.map(function(pid) {
     var pod = pods[pid];
@@ -8365,12 +8408,16 @@ function _buildPodSummary(taxiDrivers, revTarget, shiftHrs) {
     }).filter(Boolean);
     var active  = members.filter(function(d){ return d.trips_today > 0; });
     var totRev  = active.reduce(function(s,d){ return s + d.rev_today; }, 0);
-    var podTgt  = members.length * revTarget;
+    var podTgt  = active.length * podRevTarget;
     var vp      = podTgt > 0 ? Math.round((totRev - podTgt) / podTgt * 100) : null;
+    var onTrack = active.filter(function(d){
+      var proj = d.shift_hrs_today > 0 ? (d.rev_today / d.shift_hrs_today) * shiftHrs : d.rev_today;
+      return proj >= podRevTarget;
+    }).length;
     var captain = pod.captain_name || (pod.captain_id
       ? ((taxiDrivers.find(function(d){ return String(d.id) === String(pod.captain_id); }) || {}).name || '\u2014')
       : '\u2014');
-    return { name: pod.name || pid, rev: totRev, vp: vp, captain: captain, active: active.length, total: members.length };
+    return { name: pod.name || pid, rev: totRev, vp: vp, captain: captain, active: active.length, total: members.length, onTrack: onTrack };
   }).sort(function(a, b){ return b.rev - a.rev; });
 
   return '<div style="padding:4px 0">'
@@ -8378,18 +8425,71 @@ function _buildPodSummary(taxiDrivers, revTarget, shiftHrs) {
         var vpHtml = r.vp !== null
           ? '<span style="font-size:10px;font-weight:600;color:' + (r.vp >= 0 ? '#22C55E' : '#EF4444') + '">' + (r.vp >= 0 ? '+' : '') + r.vp + '%</span>'
           : '';
-        return '<div style="padding:5px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">'
+        return '<div style="padding:8px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">'
           + '<div style="flex:1;min-width:0">'
-          + '<div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + r.name + '</div>'
-          + '<div style="font-size:10px;color:var(--muted)">' + r.active + '/' + r.total + ' active \u00b7 cap: ' + r.captain + '</div>'
+          + '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + r.name + '</div>'
+          + '<div style="font-size:10px;color:var(--muted);margin-top:1px">'
+          + r.active + '/' + r.total + ' active'
+          + (r.active > 0 ? ' \u00b7 <span style="color:#22C55E">' + r.onTrack + ' on-track</span>' : '')
+          + ' \u00b7 cap: ' + r.captain + '</div>'
           + '</div>'
           + '<div style="text-align:right;flex-shrink:0">'
-          + '<div style="font-size:12px;font-weight:600">\u20b1' + r.rev.toLocaleString() + '</div>'
+          + '<div style="font-size:13px;font-weight:700">\u20b1' + r.rev.toLocaleString() + '</div>'
           + vpHtml
           + '</div></div>';
       }).join('')
     + '</div>';
 }
+function _buildShiftSummaryInline(taxiDrivers) {
+  var active = taxiDrivers.filter(function(d){ return d.trips_today > 0; });
+  var onTrack = 0;
+  var taxiRevTgt = _perfCfg('taxi_rev_per_shift', 2600);
+  var shiftHrs = _perfCfg('taxi_shift_hrs', 9);
+  active.forEach(function(d){
+    var proj = d.shift_hrs_today > 0 ? (d.rev_today / d.shift_hrs_today) * shiftHrs : 0;
+    if (proj >= taxiRevTgt) onTrack++;
+  });
+  return active.length > 0
+    ? '<span style="color:#22C55E">' + onTrack + ' on-track</span> / ' + active.length + ' taxi active'
+    : 'No taxi data yet';
+}
+
+function _buildAssetLeaderboard() {
+  var assets = window.ASSETS || [];
+  var mtd    = window.DB_ASSET_MTD || {};
+  var rev    = window.DB_ASSET_REV || {};
+  var assetTgt = _perfCfg('asset_daily_target', 3000) || ((window.ASET || {}).defaultTarget || 3000);
+  if (assets.length === 0) return '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No asset data</div>';
+  var rows = assets.map(function(a) {
+    var vid = String(a.vehicle_id || '');
+    var aid = String(a.asset_id || '');
+    var m = mtd[vid] || {};
+    var revToday = m.rev_today || rev[aid] || 0;
+    var tripsToday = m.am_trips_today + m.pm_trips_today || 0;
+    var revMtd = m.rev_mtd || 0;
+    var utilHrs = m.utilized_hrs || 0;
+    var utilPct = utilHrs > 0 ? Math.round(utilHrs / 9 * 100) : 0;
+    var vs = assetTgt > 0 ? Math.round(revToday / assetTgt * 100) : null;
+    return { plate: a.plate || a.asset_id, depot: a.depot || '\u2014', revToday: revToday, tripsToday: tripsToday, revMtd: revMtd, utilPct: utilPct, vs: vs };
+  }).sort(function(a, b){ return b.revToday - a.revToday; });
+  var tableRows = rows.map(function(r, i) {
+    var vsHtml = r.vs !== null
+      ? '<span style="color:' + (r.vs >= 100 ? '#22C55E' : r.vs >= 70 ? '#F59E0B' : '#EF4444') + ';font-weight:600">' + r.vs + '%</span>'
+      : '\u2014';
+    return [
+      i + 1,
+      r.plate,
+      r.depot,
+      r.revToday > 0 ? '\u20b1' + r.revToday.toLocaleString() : '\u2014',
+      vsHtml,
+      r.tripsToday,
+      r.revMtd > 0 ? '\u20b1' + r.revMtd.toLocaleString() : '\u2014',
+      r.utilPct > 0 ? r.utilPct + '%' : '\u2014',
+    ];
+  });
+  return _pTable(['#','Plate','Depot','Rev Today','vs Target','Trips','MTD Rev','Util'], tableRows, 'No asset data');
+}
+
 // ─── END PERFORMANCE & ECONOMICS ─────────────────────────────────────────────
 
 </script>

@@ -1,5 +1,5 @@
 # Xpress DXP Platform — Data Contract
-**Version:** 1.1 · **Last updated:** 2026-04-14  
+**Version:** 1.2 · **Last updated:** 2026-04-14
 **Owner:** Nathan (Ops/Strategy)  
 **Repo:** `nathant30/dxp-ops` · `XPRESS_DATA_CONTRACT.md`
 
@@ -324,18 +324,23 @@ Scope: VehicleTypeId = 16 · current month to date
 
 | Key | Default | Purpose |
 |---|---|---|
-| taxi_am_qty | 0 | AM shift driver count |
-| taxi_pm_qty | 0 | PM shift driver count |
-| taxi_rev_per_shift | 2600 | Revenue target per taxi shift (P) |
-| taxi_shift_hrs | 9 | Standard shift length (hrs) |
-| moto_qty | 0 | Moto driver count |
-| moto_rev_per_shift | 1200 | Revenue target per moto shift (P) |
+| taxi_am_qty | 0 | Taxi AM shift driver count |
+| taxi_pm_qty | 0 | Taxi PM shift driver count |
+| taxi_rev_per_shift | 2600 | Revenue target per taxi shift (₱) |
+| taxi_shift_hrs | 9 | Standard taxi shift length (hrs) |
+| moto_am_qty | 0 | Moto Taxi AM shift driver count |
+| moto_pm_qty | 0 | Moto Taxi PM shift driver count |
+| moto_rev_per_shift | 1200 | Revenue target per moto shift (₱) |
 | moto_shift_hrs | 9 | Standard moto shift length (hrs) |
 | gocar_trips_target | 20 | Go Car daily trip target |
 | gosuv_trips_target | 10 | Go SUV daily trip target |
+| moto_trips_target | 50 | Moto Regular daily trip target |
+| etrike_trips_target | 30 | e-Trike daily trip target |
 | commission_pct_target | 20 | Rideshare commission target (%) |
+| pod_rev_target | 2600 | Per-driver revenue target used for pod on-track calculation |
+| asset_daily_target | 3000 | Daily revenue target per taxi asset — synced to ASET.defaultTarget on save |
 | util_target | 70 | Taxi utilization target (%) |
-| driver_shift_cost | 1432 | P/shift cost used in BEP formula |
+| driver_shift_cost | 1432 | ₱/shift cost used in BEP formula |
 
 BEP formula:
   bep_trips = Math.ceil(driver_shift_cost / avg_fare)
@@ -343,7 +348,7 @@ BEP formula:
 
 Fleet daily target formula:
   fleetTarget = (taxi_am_qty + taxi_pm_qty) * taxi_rev_per_shift
-              + moto_qty * moto_rev_per_shift
+              + (moto_am_qty + moto_pm_qty) * moto_rev_per_shift
 
 ---
 
@@ -367,3 +372,4 @@ AM total: 24 drivers · PM total: 52 drivers · Fleet: 56 vehicles x 2 shifts = 
 |---|---|---|
 | 1.0 | 2026-04-14 | Initial contract from live codebase audit |
 | 1.1 | 2026-04-14 | Added maintenance rules, CC instructions, changelog, update workflow |
+| 1.2 | 2026-04-14 | PERF_CONFIG: replaced moto_qty with moto_am_qty+moto_pm_qty; added moto_trips_target, etrike_trips_target, pod_rev_target, asset_daily_target |
