@@ -8367,9 +8367,21 @@ function buildPerformance() {
   } else if (PERF_DETAIL_TAB === 'economics') {
     tabContent = econCards;
   } else {
-    tabContent = '<div style="padding:9px 14px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface);display:flex;justify-content:space-between;align-items:center">'
-      + (fleet.length > 0 ? '<span>' + filtFleet.length + ' on fleet \u00b7 sorted by projected revenue</span>' : '<span>Waiting for driver data\u2026</span>')
-      + (fleet.length > 0 ? '<span style="font-size:11px;color:var(--muted)">' + _buildShiftSummaryInline(taxiFleet) + '</span>' : '')
+    var _sortLabels = { name:'Driver', svc:'Service', shift:'Shift', trips:'Trips', pace:'Pace/hr', proj:'Projected', status:'Status' };
+    var _sortLabel = _sortLabels[PERF_DRIVER_SORT.col] || 'Projected';
+    var _sortArrow = PERF_DRIVER_SORT.dir === -1 ? '\u2193' : '\u2191';
+    var _filterChip = PERF_SVC_FILTER === 'all' ? 'All Services'
+      : ((_PERF_SVCS.find(function(s){ return s.vtid === PERF_SVC_FILTER; }) || {}).icon || '') + '\u00a0'
+        + ((_PERF_SVCS.find(function(s){ return s.vtid === PERF_SVC_FILTER; }) || {}).name || PERF_SVC_FILTER);
+    tabContent = '<div style="padding:7px 14px;font-size:11px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+      + (fleet.length > 0
+        ? '<span style="color:var(--text);font-weight:500">' + activeFleet.length + ' active</span>'
+          + '<span style="color:var(--muted)">\u00b7</span>'
+          + '<span style="background:var(--border);color:var(--text);border-radius:10px;padding:1px 8px;font-size:11px">' + _filterChip + '</span>'
+          + '<span style="color:var(--muted)">\u00b7</span>'
+          + '<span style="color:var(--accent);font-weight:500">Sorted: ' + _sortLabel + ' ' + _sortArrow + '</span>'
+          + '<span style="color:var(--muted);margin-left:auto">' + _buildShiftSummaryInline(taxiFleet) + '</span>'
+        : '<span style="color:var(--muted)">Waiting for driver data\u2026</span>')
       + '</div>'
       + driverContent;
   }
