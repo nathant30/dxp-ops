@@ -4307,7 +4307,7 @@ const _exp = {
   ackBrief, showCheckinForm, saveCheckin, showIncidentForm, saveIncident, resolveIncident, renderFleetMgmtTab, showSwapMember,
   updateSwapTargetDrivers, executeSwap, showAddToPod, addMemberToPod, removePodMember,
   buildPerformance, setPerfTab, showPerfConfig, savePerfConfig,
-  setPerfSvc, togglePerfEcon, togglePerfAll, setPerfDetailTab,
+  setPerfSvc, togglePerfEcon, togglePerfAll, setPerfDetailTab, setPerfDriverSort,
   _renderPerfCfgTab, _perfCfgFlushTab,
 };;;;;;
 try { Object.assign(window, _exp); } catch(e) { document.body.innerHTML = '<div style="padding:20px;background:#FEF2F2;color:#991B1B;font-family:monospace">Boot error: ' + e.message + '</div>'; }
@@ -7891,6 +7891,7 @@ var PERF_ECON_OPEN    = false;
 var PERF_SHOW_ALL     = false;
 var PERF_SVC_FILTER   = 'all';
 var PERF_DETAIL_TAB   = 'drivers';
+var PERF_DRIVER_SORT  = { col: 'proj', dir: -1 };
 
 function _perfCfg(k, def) {
   return (PERF_CONFIG[k] !== undefined && PERF_CONFIG[k] !== '') ? Number(PERF_CONFIG[k]) : def;
@@ -7901,6 +7902,14 @@ function setPerfSvc(s)   { PERF_SVC_FILTER = s; buildPerformance(); }
 function togglePerfEcon()      { PERF_ECON_OPEN    = !PERF_ECON_OPEN;  buildPerformance(); }
 function togglePerfAll()       { PERF_SHOW_ALL     = !PERF_SHOW_ALL;   buildPerformance(); }
 function setPerfDetailTab(t)   { PERF_DETAIL_TAB   = t;                 buildPerformance(); }
+function setPerfDriverSort(col) {
+  if (PERF_DRIVER_SORT.col === col) {
+    PERF_DRIVER_SORT.dir = PERF_DRIVER_SORT.dir === -1 ? 1 : -1;
+  } else {
+    PERF_DRIVER_SORT = { col: col, dir: -1 };
+  }
+  buildPerformance();
+}
 
 // ── Config modal ──────────────────────────────────────────────────────────────
 var _perfCfgTab   = 'taxi';
@@ -8208,13 +8217,51 @@ function buildPerformance() {
   // ── Section 2: Driver Performance Feed ───────────────────────────────────
   var taxiFleet   = fleet.filter(function(d){ return d.vtid === '16'; });
   var filtFleet   = PERF_SVC_FILTER === 'all' ? fleet : fleet.filter(function(d){ return d.vtid === PERF_SVC_FILTER; });
-  var activeFleet = filtFleet.filter(function(d){ return d.trips_today > 0; }).slice().sort(function(a, b) {
-    var ap = a.shift_hrs_today > 0 ? a.rev_today / a.shift_hrs_today * shiftHrs : a.rev_today;
-    var bp = b.shift_hrs_today > 0 ? b.rev_today / b.shift_hrs_today * shiftHrs : b.rev_today;
-    return bp - ap;
+  // Build enriched driver rows for sort + render
+  var _svcMap = {};
+  _PERF_SVCS.forEach(function(s){ _svcMap[s.vtid] = s; });
+  var ashifts = window.ASHIFTS || [];
+
+  function _driverShiftLabel(d) {
+    var rec = ashifts.find(function(s){ return String(s.driver_id) === String(d.id) || String(s.rider_id) === String(d.id); });
+    if (!rec) return '\u2014';
+    if (rec.shift_code) return String(rec.shift_code).includes('AM') ? 'AM' : 'PM';
+    if (rec.actual_start) return new Date(rec.actual_start).getHours() < 13 ? 'AM' : 'PM';
+    return '\u2014';
+  }
+
+  var activeFleet = filtFleet.filter(function(d){ return d.trips_today > 0; }).map(function(d) {
+    var pace  = d.shift_hrs_today > 0 ? Math.round(d.rev_today / d.shift_hrs_today) : 0;
+    var proj  = d.shift_hrs_today > 0 ? Math.round(d.rev_today / d.shift_hrs_today * shiftHrs) : d.rev_today;
+    var shift = _driverShiftLabel(d);
+    var svcInfo = _svcMap[d.vtid] || {};
+    var statusOrder = d.vtid === '16'
+      ? (proj >= taxiRevTgt ? 3 : proj >= taxiRevTgt * 0.7 ? 2 : 1) : 0;
+    return { d: d, pace: pace, proj: proj, shift: shift, svcInfo: svcInfo, statusOrder: statusOrder };
   });
+
+  // Sort
+  activeFleet.sort(function(a, b) {
+    var col = PERF_DRIVER_SORT.col, dir = PERF_DRIVER_SORT.dir;
+    var av, bv;
+    if      (col === 'name')  { av = (a.d.name || '').toLowerCase(); bv = (b.d.name || '').toLowerCase(); return dir * (av < bv ? -1 : av > bv ? 1 : 0); }
+    else if (col === 'svc')   { av = a.d.vtid; bv = b.d.vtid; return dir * (av < bv ? -1 : av > bv ? 1 : 0); }
+    else if (col === 'shift') { av = a.shift; bv = b.shift; return dir * (av < bv ? -1 : av > bv ? 1 : 0); }
+    else if (col === 'trips') { return dir * (a.d.trips_today - b.d.trips_today); }
+    else if (col === 'pace')  { return dir * (a.pace - b.pace); }
+    else if (col === 'status'){ return dir * (a.statusOrder - b.statusOrder); }
+    else                      { return dir * (a.proj - b.proj); } // default: proj
+  });
+
   var showCount = PERF_SHOW_ALL ? activeFleet.length : Math.min(15, activeFleet.length);
   var hasMore   = activeFleet.length > 15;
+
+  // Sortable header helper
+  function _sTh(label, col) {
+    var active = PERF_DRIVER_SORT.col === col;
+    var arrow = active ? (PERF_DRIVER_SORT.dir === -1 ? ' \u2193' : ' \u2191') : ' \u2195';
+    return '<th onclick="setPerfDriverSort(\'' + col + '\')" style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:' + (active ? 'var(--accent)' : 'var(--muted)') + ';cursor:pointer;white-space:nowrap;user-select:none">' + label + arrow + '</th>';
+  }
 
   // Driver table — skeleton if no fleet data
   var driverContent;
@@ -8224,6 +8271,7 @@ function buildPerformance() {
       + Array(8).fill(0).map(function() {
           return '<div style="display:flex;gap:8px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--border)">'
             + '<div class="skel" style="width:110px;height:11px"></div>'
+            + '<div class="skel" style="width:60px;height:11px"></div>'
             + '<div class="skel" style="width:28px;height:11px"></div>'
             + '<div class="skel" style="width:28px;height:11px"></div>'
             + '<div class="skel" style="width:44px;height:11px"></div>'
@@ -8233,37 +8281,33 @@ function buildPerformance() {
         }).join('')
       + '</div>';
   } else {
-    var driverRows = activeFleet.slice(0, showCount).map(function(d) {
-      var pace  = d.shift_hrs_today > 0 ? Math.round(d.rev_today / d.shift_hrs_today) : 0;
-      var proj  = d.shift_hrs_today > 0 ? Math.round(d.rev_today / d.shift_hrs_today * shiftHrs) : d.rev_today;
+    var tableRows = activeFleet.slice(0, showCount).map(function(row, i) {
+      var d = row.d;
+      var svcLabel = row.svcInfo.icon ? row.svcInfo.icon + '\u00a0' + (row.svcInfo.name || d.vtid) : (d.vtid || '\u2014');
       var statusHtml;
       if (d.vtid === '16') {
-        if      (proj >= taxiRevTgt)            statusHtml = '<span style="color:#22C55E;font-size:11px">\ud83d\udfe2 On Track</span>';
-        else if (proj >= taxiRevTgt * 0.7)      statusHtml = '<span style="color:#F59E0B;font-size:11px">\ud83d\udfe1 At Risk</span>';
-        else                                    statusHtml = '<span style="color:#EF4444;font-size:11px">\ud83d\udd34 Struggling</span>';
+        if      (row.statusOrder === 3) statusHtml = '<span style="color:#22C55E;font-size:11px">\ud83d\udfe2 On Track</span>';
+        else if (row.statusOrder === 2) statusHtml = '<span style="color:#F59E0B;font-size:11px">\ud83d\udfe1 At Risk</span>';
+        else                            statusHtml = '<span style="color:#EF4444;font-size:11px">\ud83d\udd34 Struggling</span>';
       } else {
         statusHtml = '<span style="font-size:11px;color:var(--muted)">' + d.trips_today + ' trips</span>';
       }
-      // Derive shift from ASHIFTS actual_start hour
-      var shiftLabel = '\u2014';
-      var ashifts = window.ASHIFTS || [];
-      var shiftRec = ashifts.find(function(s){ return String(s.driver_id) === String(d.id) || String(s.rider_id) === String(d.id); });
-      if (shiftRec && shiftRec.actual_start) {
-        var h = new Date(shiftRec.actual_start).getHours();
-        shiftLabel = h < 13 ? 'AM' : 'PM';
-      } else if (shiftRec && shiftRec.shift_code) {
-        shiftLabel = String(shiftRec.shift_code).includes('AM') ? 'AM' : 'PM';
-      }
-      return [
-        '<span style="font-size:12px;font-weight:500">' + (d.name || d.id) + '</span>',
-        shiftLabel,
-        d.trips_today,
-        pace > 0 ? '\u20b1' + pace : '\u2014',
-        d.vtid === '16' ? '\u20b1' + proj.toLocaleString() : '\u2014',
-        statusHtml,
-      ];
+      return '<tr style="border-bottom:1px solid var(--border);background:' + (i % 2 ? 'var(--surface)' : 'transparent') + '">'
+        + '<td style="padding:8px 12px;white-space:nowrap"><span style="font-size:12px;font-weight:500">' + (d.name || d.id) + '</span></td>'
+        + '<td style="padding:8px 12px;white-space:nowrap;font-size:12px">' + svcLabel + '</td>'
+        + '<td style="padding:8px 12px;white-space:nowrap;font-size:12px;color:var(--muted)">' + row.shift + '</td>'
+        + '<td style="padding:8px 12px;white-space:nowrap;font-size:12px">' + d.trips_today + '</td>'
+        + '<td style="padding:8px 12px;white-space:nowrap;font-size:12px">' + (row.pace > 0 ? '\u20b1' + row.pace : '\u2014') + '</td>'
+        + '<td style="padding:8px 12px;white-space:nowrap;font-size:12px">' + (d.vtid === '16' ? '\u20b1' + row.proj.toLocaleString() : '\u2014') + '</td>'
+        + '<td style="padding:8px 12px;white-space:nowrap">' + statusHtml + '</td>'
+        + '</tr>';
     });
-    driverContent = _pTable(['Driver','Shift','Trips','Pace/hr','Projected','Status'], driverRows, 'No active drivers')
+    driverContent = (activeFleet.length === 0
+      ? '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No active drivers</div>'
+      : '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+        + '<thead><tr>' + _sTh('Driver','name') + _sTh('Service','svc') + _sTh('Shift','shift') + _sTh('Trips','trips') + _sTh('Pace/hr','pace') + _sTh('Projected','proj') + _sTh('Status','status') + '</tr></thead>'
+        + '<tbody>' + tableRows.join('') + '</tbody>'
+        + '</table></div>')
       + (hasMore ? '<div style="padding:8px 14px;text-align:center;border-top:1px solid var(--border)">'
         + '<button onclick="togglePerfAll()" style="font-size:12px;color:var(--accent);background:none;border:none;cursor:pointer;padding:4px 8px">'
         + (PERF_SHOW_ALL ? '\u25b2 Show less' : '\u25bc Show all ' + activeFleet.length + ' drivers') + '</button></div>' : '');
