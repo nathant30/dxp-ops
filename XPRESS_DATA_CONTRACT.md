@@ -372,4 +372,4 @@ AM total: 24 drivers · PM total: 52 drivers · Fleet: 56 vehicles x 2 shifts = 
 |---|---|---|
 | 1.0 | 2026-04-14 | Initial contract from live codebase audit |
 | 1.1 | 2026-04-14 | Added maintenance rules, CC instructions, changelog, update workflow |
-| 1.2 | 2026-04-14 | PERF_CONFIG: replaced moto_qty with moto_am_qty+moto_pm_qty; added moto_trips_target, etrike_trips_target, pod_rev_target, asset_daily_target |
+| 1.2 | 2026-04-14 | PERF_CONFIG: replaced moto_qty with moto_am_qty+moto_pm_qty; added moto_trips_target, etrike_trips_target, pod_rev_target, asset_daily_target. edge fn v31: CTE for shift_hrs fixes timeout; services_overview vtid 10 + StatusId corrections |
