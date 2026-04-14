@@ -622,13 +622,6 @@ svg{flex-shrink:0}
         <div class="ph-left"><div class="ph-title">Performance &amp; Economics</div><div class="ph-sub" id="perf-sub">Operating contract of the company</div></div>
         <div class="ph-actions"><button class="btn btn-s" onclick="showPerfConfig()">⚙ Targets</button></div>
       </div>
-      <div class="stabs" id="perf-tabs" style="padding:0 24px;border-bottom:1px solid var(--border);background:var(--card);display:flex;gap:4px;align-items:center;">
-        <button class="stab on"  id="ptab-strategy"  onclick="setPerfTab('strategy')">Strategy</button>
-        <button class="stab"     id="ptab-drivers"   onclick="setPerfTab('drivers')">Driver KPIs</button>
-        <button class="stab"     id="ptab-pods"      onclick="setPerfTab('pods')">Pod KPIs</button>
-        <button class="stab"     id="ptab-company"   onclick="setPerfTab('company')">Company KPIs</button>
-        <button class="stab"     id="ptab-economics" onclick="setPerfTab('economics')">Unit Economics</button>
-      </div>
       <div class="content" id="perf-body" style="padding:0"></div>
     </section>
 
@@ -4310,6 +4303,7 @@ const _exp = {
   ackBrief, showCheckinForm, saveCheckin, showIncidentForm, saveIncident, resolveIncident, renderFleetMgmtTab, showSwapMember,
   updateSwapTargetDrivers, executeSwap, showAddToPod, addMemberToPod, removePodMember,
   buildPerformance, setPerfTab, showPerfConfig, savePerfConfig,
+  setPerfSvc, togglePerfEcon, togglePerfAll,
 };;;;;;
 try { Object.assign(window, _exp); } catch(e) { document.body.innerHTML = '<div style="padding:20px;background:#FEF2F2;color:#991B1B;font-family:monospace">Boot error: ' + e.message + '</div>'; }
 
@@ -7885,28 +7879,27 @@ try{_addSettingsToNav();}catch(e){}
 try{_injectViewToggle('fleet');}catch(e){}
 
 // ─── PERFORMANCE & ECONOMICS ─────────────────────────────────────────────────
-var PERF_TAB = 'strategy';
 var PERF_CONFIG = (function(){
   try { return JSON.parse(lsGet('PERF_CONFIG') || '{}'); } catch(e){ return {}; }
 })();
+var PERF_ECON_OPEN  = false;
+var PERF_SHOW_ALL   = false;
+var PERF_SVC_FILTER = 'all';
 
 function _perfCfg(k, def) {
   return (PERF_CONFIG[k] !== undefined && PERF_CONFIG[k] !== '') ? Number(PERF_CONFIG[k]) : def;
 }
 
-function setPerfTab(t) {
-  PERF_TAB = t;
-  ['strategy','drivers','pods','company','economics'].forEach(function(id){
-    var b = document.getElementById('ptab-' + id);
-    if (b) b.className = 'stab' + (id === t ? ' on' : '');
-  });
-  buildPerformance();
-}
+function setPerfTab() {}  // no-op stub — tabs removed, kept for _exp compat
+function setPerfSvc(s)   { PERF_SVC_FILTER = s; buildPerformance(); }
+function togglePerfEcon(){ PERF_ECON_OPEN  = !PERF_ECON_OPEN;  buildPerformance(); }
+function togglePerfAll() { PERF_SHOW_ALL   = !PERF_SHOW_ALL;   buildPerformance(); }
 
+// ── Config modal ──────────────────────────────────────────────────────────────
 function _pcfgInput(label, key, val, oninput) {
   return '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">' + label + '</label>'
     + '<input id="pcfg-' + key + '" type="number" value="' + val + '"'
-    + (oninput ? ' oninput="'+oninput+'"' : '')
+    + (oninput ? ' oninput="' + oninput + '"' : '')
     + ' style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:13px"></div>';
 }
 
@@ -7923,540 +7916,479 @@ function _perfCfgUpdateTotal() {
   var total     = amFleet + pmFleet + motoFleet;
   var el = document.getElementById('pcfg-fleet-total');
   if (el) el.innerHTML =
-    'AM: <strong>'+amQty+'</strong> × ₱'+tr.toLocaleString()+' = <strong>₱'+amFleet.toLocaleString()+'</strong>'
-    + ' &nbsp;·&nbsp; PM: <strong>'+pmQty+'</strong> × ₱'+tr.toLocaleString()+' = <strong>₱'+pmFleet.toLocaleString()+'</strong>'
-    + ' &nbsp;·&nbsp; Moto: <strong>₱'+motoFleet.toLocaleString()+'</strong>'
-    + '<br>Combined salaried fleet target = <strong style="color:var(--accent)">₱'+total.toLocaleString()+'/day</strong>';
-
-  // BEP: ₱1,432 driver cost ÷ avg fare from DB
-  var taxiDrivers = (window.DB_FLEET_HEALTH||[]).filter(function(d){ return String(d.vtid)==='16' && d.avg_fare > 0; });
-  var avgFare = taxiDrivers.length > 0
-    ? Math.round(taxiDrivers.reduce(function(s,d){ return s+d.avg_fare; },0) / taxiDrivers.length)
-    : (Number(((window.DB_TODAY)||{}).avg_fare) || 0);
-  var SHIFT_COST = 1432;
-  var bep = avgFare > 0 ? Math.ceil(SHIFT_COST / avgFare) : '—';
+    'AM: <strong>' + amQty + '</strong> \u00d7 \u20b1' + tr.toLocaleString() + ' = <strong>\u20b1' + amFleet.toLocaleString() + '</strong>'
+    + ' &nbsp;\u00b7&nbsp; PM: <strong>' + pmQty + '</strong> \u00d7 \u20b1' + tr.toLocaleString() + ' = <strong>\u20b1' + pmFleet.toLocaleString() + '</strong>'
+    + ' &nbsp;\u00b7&nbsp; Moto: <strong>\u20b1' + motoFleet.toLocaleString() + '</strong>'
+    + '<br>Combined daily target = <strong style="color:var(--accent)">\u20b1' + total.toLocaleString() + '/day</strong>';
+  var avgFareLive = Number(((window.DB_SERVICES || {})['16'] || {}).avg_fare || 0)
+    || Number(((window.DB_TODAY) || {}).avg_fare || 0) || 0;
+  var shiftCost = v('pcfg-driver_shift_cost') || 1432;
+  var bep = avgFareLive > 0 ? Math.ceil(shiftCost / avgFareLive) : '—';
   var bepEl = document.getElementById('pcfg-bep-display');
-  if (bepEl) bepEl.innerHTML = '₱'+SHIFT_COST+' cost ÷ ₱'+(avgFare||'?')+' avg fare = <strong>'+bep+' trips</strong>';
+  if (bepEl) bepEl.innerHTML = '\u20b1' + shiftCost + ' shift cost \u00f7 \u20b1' + (avgFareLive || '?') + ' avg fare = <strong>' + bep + ' trips</strong>'
+    + (avgFareLive > 0 ? ' <span style="background:#22C55E;color:#fff;font-size:10px;padding:1px 5px;border-radius:10px">Live</span>' : '');
 }
 
 function showPerfConfig() {
   var c = PERF_CONFIG;
-  var taxiAmQty  = c.taxi_am_qty         !== undefined ? c.taxi_am_qty         : '';
-  var taxiPmQty  = c.taxi_pm_qty         !== undefined ? c.taxi_pm_qty         : '';
-  var motoQty    = c.moto_qty            !== undefined ? c.moto_qty            : '';
-  var taxiRev    = c.taxi_rev_per_shift  !== undefined ? c.taxi_rev_per_shift  : 2600;
-  var taxiHrs    = c.taxi_shift_hrs      !== undefined ? c.taxi_shift_hrs      : 9;
-  var motoRev    = c.moto_rev_per_shift  !== undefined ? c.moto_rev_per_shift  : 1200;
-  var motoHrs    = c.moto_shift_hrs      !== undefined ? c.moto_shift_hrs      : 9;
-  var gocarTrips = c.gocar_trips_target  !== undefined ? c.gocar_trips_target  : 20;
-  var gosuvTrips = c.gosuv_trips_target  !== undefined ? c.gosuv_trips_target  : 10;
-  var commPct    = c.commission_pct_target!==undefined ? c.commission_pct_target: 20;
-  var utilPct    = c.util_target         !== undefined ? c.util_target         : 70;
-
+  function val(k, def) { return c[k] !== undefined ? c[k] : def; }
+  var amQty      = val('taxi_am_qty', '');
+  var pmQty      = val('taxi_pm_qty', '');
+  var motoQty    = val('moto_qty', '');
+  var taxiRev    = val('taxi_rev_per_shift', 2600);
+  var taxiHrs    = val('taxi_shift_hrs', 9);
+  var motoRev    = val('moto_rev_per_shift', 1200);
+  var motoHrs    = val('moto_shift_hrs', 9);
+  var gocarTrips = val('gocar_trips_target', 20);
+  var gosuvTrips = val('gosuv_trips_target', 10);
+  var commPct    = val('commission_pct_target', 20);
+  var utilPct    = val('util_target', 70);
+  var shiftCost  = val('driver_shift_cost', 1432);
   var upd = '_perfCfgUpdateTotal()';
   var sep = '<div style="grid-column:1/-1;border-top:1px solid var(--border);margin:4px 0"></div>';
   var sh  = 'font-size:11px;font-weight:600;color:var(--text);grid-column:1/-1;margin-top:4px;margin-bottom:2px';
-
   var body = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">'
-    + '<div style="'+sh+'">Taxi — Salaried (per shift)</div>'
-    + _pcfgInput('AM Shift Drivers', 'taxi_am_qty', taxiAmQty, upd)
-    + _pcfgInput('PM Shift Drivers', 'taxi_pm_qty', taxiPmQty, upd)
-    + _pcfgInput('Rev Target / Shift (₱)', 'taxi_rev_per_shift', taxiRev, upd)
-    + '<div style="grid-column:1/-1;font-size:11px;line-height:1.5;padding:6px 8px;background:var(--surface);border-radius:6px;border:1px solid var(--border)" id="pcfg-fleet-total">—</div>'
+    + '<div style="' + sh + '">Taxi \u2014 Salaried (per shift)</div>'
+    + _pcfgInput('AM Shift Drivers', 'taxi_am_qty', amQty, upd)
+    + _pcfgInput('PM Shift Drivers', 'taxi_pm_qty', pmQty, upd)
+    + _pcfgInput('Rev Target / Shift (\u20b1)', 'taxi_rev_per_shift', taxiRev, upd)
+    + '<div style="grid-column:1/-1;font-size:11px;line-height:1.5;padding:6px 8px;background:var(--surface);border-radius:6px;border:1px solid var(--border)" id="pcfg-fleet-total">\u2014</div>'
     + '<div style="grid-column:span 2"></div>'
     + _pcfgInput('Shift Hours (Taxi)', 'taxi_shift_hrs', taxiHrs, '')
     + sep
-    + '<div style="'+sh+'">Moto Taxi — Salaried</div>'
-    + _pcfgInput('Moto Taxi — Qty on Fleet', 'moto_qty', motoQty, upd)
-    + _pcfgInput('Rev Target / Shift (₱)', 'moto_rev_per_shift', motoRev, upd)
+    + '<div style="' + sh + '">Moto Taxi \u2014 Salaried</div>'
+    + _pcfgInput('Qty on Fleet', 'moto_qty', motoQty, upd)
+    + _pcfgInput('Rev Target / Shift (\u20b1)', 'moto_rev_per_shift', motoRev, upd)
     + _pcfgInput('Shift Hours', 'moto_shift_hrs', motoHrs, '')
     + sep
-    + '<div style="'+sh+'">Rideshare Targets</div>'
-    + _pcfgInput('Go Car Trips/Day Target', 'gocar_trips_target', gocarTrips, '')
-    + _pcfgInput('Go SUV Trips/Day Target', 'gosuv_trips_target', gosuvTrips, '')
+    + '<div style="' + sh + '">Rideshare Targets</div>'
+    + _pcfgInput('Go Car Trips/Day', 'gocar_trips_target', gocarTrips, '')
+    + _pcfgInput('Go SUV Trips/Day', 'gosuv_trips_target', gosuvTrips, '')
     + '<div></div>'
     + sep
-    + '<div style="'+sh+'">Operations</div>'
-    + '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">BEP Trips/Shift (auto-computed)</label>'
-    + '<div id="pcfg-bep-display" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--muted)">—</div></div>'
+    + '<div style="' + sh + '">Operations</div>'
+    + _pcfgInput('Driver Shift Cost (\u20b1)', 'driver_shift_cost', shiftCost, upd)
+    + '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">BEP (auto-computed)</label>'
+    + '<div id="pcfg-bep-display" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--muted)">\u2014</div></div>'
     + _pcfgInput('Commission Target (%)', 'commission_pct_target', commPct, '')
     + _pcfgInput('Utilization Target (%)', 'util_target', utilPct, '')
     + '</div>';
-
   var footer = '<button class="btn btn-s" onclick="closeModal()">Cancel</button>'
     + '<button class="btn btn-p" onclick="savePerfConfig()">Save</button>';
-
   openModal('Performance Targets', body, footer);
   setTimeout(_perfCfgUpdateTotal, 50);
 }
 
 function savePerfConfig() {
-  ['taxi_am_qty','taxi_pm_qty','moto_qty','taxi_rev_per_shift','taxi_shift_hrs','moto_rev_per_shift','moto_shift_hrs',
-   'gocar_trips_target','gosuv_trips_target','commission_pct_target','util_target'].forEach(function(k){
+  ['taxi_am_qty','taxi_pm_qty','moto_qty','taxi_rev_per_shift','taxi_shift_hrs',
+   'moto_rev_per_shift','moto_shift_hrs','gocar_trips_target','gosuv_trips_target',
+   'driver_shift_cost','commission_pct_target','util_target'].forEach(function(k) {
     var el = document.getElementById('pcfg-' + k);
     if (el) PERF_CONFIG[k] = el.value;
   });
-  // Auto-compute and persist BEP
-  var taxiDrivers = (window.DB_FLEET_HEALTH||[]).filter(function(d){ return String(d.vtid)==='16' && d.avg_fare > 0; });
-  var avgFare = taxiDrivers.length > 0
-    ? Math.round(taxiDrivers.reduce(function(s,d){ return s+d.avg_fare; },0) / taxiDrivers.length)
-    : (Number(((window.DB_TODAY)||{}).avg_fare) || 0);
-  PERF_CONFIG.bep_trips = avgFare > 0 ? Math.ceil(1432 / avgFare) : (PERF_CONFIG.bep_trips || 8);
-  try { lsSet('PERF_CONFIG', JSON.stringify(PERF_CONFIG)); } catch(e){}
+  var avgFareLive = Number(((window.DB_SERVICES || {})['16'] || {}).avg_fare || 0)
+    || Number(((window.DB_TODAY) || {}).avg_fare || 0) || 0;
+  var sc = _perfCfg('driver_shift_cost', 1432);
+  PERF_CONFIG.bep_trips = avgFareLive > 0 ? Math.ceil(sc / avgFareLive) : (PERF_CONFIG.bep_trips || 8);
+  try { lsSet('PERF_CONFIG', JSON.stringify(PERF_CONFIG)); } catch(e) {}
   closeModal();
   buildPerformance();
 }
 
-function buildPerformance() {
-  var el = document.getElementById('perf-body');
-  if (!el) return;
-
-  if      (PERF_TAB === 'strategy')  el.innerHTML = _perfStrategy();
-  else if (PERF_TAB === 'drivers')   el.innerHTML = _perfDrivers();
-  else if (PERF_TAB === 'pods')      el.innerHTML = _perfPods();
-  else if (PERF_TAB === 'company')   el.innerHTML = _perfCompany();
-  else if (PERF_TAB === 'economics') el.innerHTML = _perfEconomics();
-}
-
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function _pKPI(label, val, sub, accent) {
-  return '<div style="background:var(--card);border:1px solid var(--border);border-top:3px solid '+(accent||'var(--accent)')+';border-radius:8px;padding:14px 16px;min-width:0">'
-    + '<div style="font-size:11px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em">'+label+'</div>'
-    + '<div style="font-size:22px;font-weight:700;color:var(--text)">'+val+'</div>'
-    + (sub ? '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+sub+'</div>' : '')
+  return '<div style="background:var(--card);border:1px solid var(--border);border-top:3px solid ' + (accent || 'var(--accent)') + ';border-radius:8px;padding:14px 16px;min-width:0">'
+    + '<div style="font-size:11px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em">' + label + '</div>'
+    + '<div style="font-size:22px;font-weight:700;color:var(--text)">' + val + '</div>'
+    + (sub ? '<div style="font-size:11px;color:var(--muted);margin-top:4px">' + sub + '</div>' : '')
     + '</div>';
 }
 function _pBar(val, target, color) {
   var pct = target > 0 ? Math.min(100, Math.round(val / target * 100)) : 0;
   var col = color || (pct >= 80 ? '#22C55E' : pct >= 50 ? '#F59E0B' : '#EF4444');
   return '<div style="height:6px;background:var(--border);border-radius:3px;margin-top:6px">'
-    + '<div style="height:6px;width:'+pct+'%;background:'+col+';border-radius:3px;transition:width .3s"></div></div>'
-    + '<div style="font-size:10px;color:var(--muted);margin-top:2px">'+pct+'% of target</div>';
+    + '<div style="height:6px;width:' + pct + '%;background:' + col + ';border-radius:3px;transition:width .3s"></div></div>'
+    + '<div style="font-size:10px;color:var(--muted);margin-top:2px">' + pct + '% of target</div>';
+}
+function _heroBar(val, target) {
+  var pct = target > 0 ? Math.min(100, Math.round(val / target * 100)) : 0;
+  var col = pct >= 80 ? '#22C55E' : pct >= 50 ? '#F59E0B' : '#EF4444';
+  return '<div style="height:4px;background:rgba(255,255,255,.2);border-radius:2px;overflow:hidden">'
+    + '<div style="height:4px;width:' + pct + '%;background:' + col + ';border-radius:2px;transition:width .4s"></div></div>';
+}
+function _heroChip(label, val, color) {
+  return '<div style="background:rgba(255,255,255,.1);border-radius:6px;padding:8px 10px">'
+    + '<div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:2px">' + label + '</div>'
+    + '<div style="font-size:16px;font-weight:700;color:' + (color || '#fff') + '">' + val + '</div>'
+    + '</div>';
 }
 function _pTable(headers, rows, emptyMsg) {
-  if (!rows || rows.length === 0) return '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">'+(emptyMsg||'No data')+'</div>';
-  var html = '<table style="width:100%;border-collapse:collapse;font-size:12px">'
-    + '<thead><tr>' + headers.map(function(h){ return '<th style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);white-space:nowrap">'+h+'</th>'; }).join('') + '</tr></thead>'
-    + '<tbody>' + rows.map(function(r,i){
-      return '<tr style="border-bottom:1px solid var(--border);background:'+(i%2===0?'transparent':'var(--surface)')+'">'+r.map(function(c){ return '<td style="padding:8px 12px;white-space:nowrap">'+c+'</td>'; }).join('')+'</tr>';
+  if (!rows || rows.length === 0) return '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">' + (emptyMsg || 'No data') + '</div>';
+  return '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+    + '<thead><tr>' + headers.map(function(h) {
+      return '<th style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);white-space:nowrap">' + h + '</th>';
+    }).join('') + '</tr></thead>'
+    + '<tbody>' + rows.map(function(r, i) {
+      return '<tr style="border-bottom:1px solid var(--border);background:' + (i % 2 ? 'var(--surface)' : 'transparent') + '">'
+        + r.map(function(c) { return '<td style="padding:8px 12px;white-space:nowrap">' + c + '</td>'; }).join('') + '</tr>';
     }).join('') + '</tbody></table>';
-  return html;
 }
 function _rag(val, lo, hi) {
-  if (val >= hi) return '<span style="color:#22C55E;font-weight:600">'+val+'</span>';
-  if (val >= lo) return '<span style="color:#F59E0B;font-weight:600">'+val+'</span>';
-  return '<span style="color:#EF4444;font-weight:600">'+val+'</span>';
+  var n = parseFloat(val);
+  if (n >= parseFloat(hi)) return '<span style="color:#22C55E;font-weight:600">' + val + '</span>';
+  if (n >= parseFloat(lo)) return '<span style="color:#F59E0B;font-weight:600">' + val + '</span>';
+  return '<span style="color:#EF4444;font-weight:600">' + val + '</span>';
 }
 
-// ── Strategy Tab ─────────────────────────────────────────────────────────────
-function _perfStrategy() {
-  var taxiTarget  = _perfCfg('taxi_rev_per_shift', 2600);
-  var taxiAmQty   = _perfCfg('taxi_am_qty', 0);
-  var taxiPmQty   = _perfCfg('taxi_pm_qty', 0);
-  var motoTarget  = _perfCfg('moto_rev_per_shift', 1200);
-  var motoQty     = _perfCfg('moto_qty', 0);
-  var shiftHrs    = _perfCfg('taxi_shift_hrs', 9);
-  var motoHrs     = _perfCfg('moto_shift_hrs', 9);
-  var gocarTgt    = _perfCfg('gocar_trips_target', 20);
-  var gosuvTgt    = _perfCfg('gosuv_trips_target', 10);
+// ── Main Render ───────────────────────────────────────────────────────────────
+var _PERF_SVCS = [
+  { vtid: '16', name: 'Taxi',         rf: 'xpress_revenue', icon: '\ud83d\ude95' },
+  { vtid: '1',  name: 'Moto Regular', rf: 'commission',     icon: '\ud83d\udef5' },
+  { vtid: '2',  name: 'Go Car',       rf: 'commission',     icon: '\ud83d\ude97' },
+  { vtid: '3',  name: 'Go SUV',       rf: 'commission',     icon: '\ud83d\ude99' },
+  { vtid: '10', name: 'e-Trike',      rf: 'commission',     icon: '\u26a1' },
+];
 
-  // Salaried fleet targets (AM + PM shifts × per-shift target)
-  var fleetTaxiAmTgt = taxiAmQty * taxiTarget;
-  var fleetTaxiPmTgt = taxiPmQty * taxiTarget;
-  var fleetTaxiTgt   = fleetTaxiAmTgt + fleetTaxiPmTgt;
-  var fleetMotoTgt   = motoQty * motoTarget;
+function buildPerformance() {
+  var el = document.getElementById('perf-body');
+  if (!el) return;
+
+  var svc   = window.DB_SERVICES  || {};
+  var fleet = window.DB_FLEET_HEALTH || [];
+  var shiftHrs   = _perfCfg('taxi_shift_hrs', 9);
+  var taxiRevTgt = _perfCfg('taxi_rev_per_shift', 2600);
+  var taxiAmQty  = _perfCfg('taxi_am_qty', 0);
+  var taxiPmQty  = _perfCfg('taxi_pm_qty', 0);
+  var motoQty    = _perfCfg('moto_qty', 0);
+  var motoRevTgt = _perfCfg('moto_rev_per_shift', 1200);
+  var fleetTaxiTgt = (taxiAmQty + taxiPmQty) * taxiRevTgt;
+  var fleetMotoTgt = motoQty * motoRevTgt;
   var fleetSalTgt  = fleetTaxiTgt + fleetMotoTgt;
 
-  // Actuals from DB
-  var fleet        = window.DB_FLEET_HEALTH || [];
-  var taxiDrivers  = fleet.filter(function(d){ return String(d.vtid) === '16'; });
-  var motoDrivers  = fleet.filter(function(d){ return String(d.vtid) === '1'; });
-  var totalTaxiRev = taxiDrivers.reduce(function(s,d){ return s + Number(d.rev_today||0); }, 0);
-  var totalMotoRev = motoDrivers.reduce(function(s,d){ return s + Number(d.rev_today||0); }, 0);
-  var totalTrips   = taxiDrivers.reduce(function(s,d){ return s + Number(d.trips_today||0); }, 0);
-  var taxiActive   = taxiDrivers.filter(function(d){ return Number(d.trips_today||0) > 0; }).length;
-
-  var svc          = window.DB_SERVICES || {};
-  var gocarTrips   = Number((svc['2']||{}).trips||0);
-  var gosuvTrips   = Number((svc['3']||{}).trips||0);
-  var gocarGtv     = Number((svc['2']||{}).gtv||0);
-  var gosuvGtv     = Number((svc['3']||{}).gtv||0);
-  var motoGtv      = Number((svc['1']||{}).gtv||0);
-
-  var totalGtv  = totalTaxiRev + totalMotoRev + motoGtv + gocarGtv + gosuvGtv;
-  var avgFare   = totalTrips > 0 ? Math.round(totalTaxiRev / totalTrips) : 0;
-  var revPerHr  = taxiActive > 0 && shiftHrs > 0 ? Math.round(totalTaxiRev / taxiActive / shiftHrs) : 0;
-
-  // On-track taxi drivers
-  var onTrack  = taxiDrivers.filter(function(d){
-    if (!d.shift_hrs_today || d.shift_hrs_today <= 0) return false;
-    return (d.rev_today / d.shift_hrs_today) * shiftHrs >= taxiTarget;
-  }).length;
-  var atRisk   = taxiDrivers.filter(function(d){
-    if (!d.shift_hrs_today || d.shift_hrs_today <= 0) return false;
-    var proj = (d.rev_today / d.shift_hrs_today) * shiftHrs;
-    return proj >= taxiTarget * 0.5 && proj < taxiTarget;
-  }).length;
-  var critical = taxiDrivers.filter(function(d){
-    if (!d.shift_hrs_today || d.shift_hrs_today <= 0) return false;
-    return (d.rev_today / d.shift_hrs_today) * shiftHrs < taxiTarget * 0.5;
-  }).length;
-
-  // BEP: auto-computed from avg fare (₱1,432 shift cost ÷ avg fare)
-  var SHIFT_COST  = 1432;
-  var bepTrips    = avgFare > 0 ? Math.ceil(SHIFT_COST / avgFare) : (_perfCfg('bep_trips', 8));
-  var bepRevFleet = bepTrips * avgFare * taxiActive;
-  var bepVarPct   = bepRevFleet > 0 ? Math.round((totalTaxiRev - bepRevFleet) / bepRevFleet * 100) : 0;
-
-  function varStr(actual, target) {
-    if (!target) return '—';
-    var vp = Math.round((actual - target) / target * 100);
-    return '<span style="color:'+(vp>=0?'#22C55E':'#EF4444')+';font-weight:600">'+(vp>=0?'+':'')+vp+'%</span>';
-  }
-
-  var kpis = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;padding:20px">'
-    + _pKPI('Total Fleet GTV', '₱'+totalGtv.toLocaleString(), 'All services today', '#6366F1')
-    + _pKPI('Taxi Revenue', '₱'+totalTaxiRev.toLocaleString(), (fleetTaxiTgt>0?'Target ₱'+fleetTaxiTgt.toLocaleString()+' · '+varStr(totalTaxiRev,fleetTaxiTgt):taxiActive+' drivers on shift'), '#0EA5E9')
-    + _pKPI('Moto Taxi Rev', '₱'+totalMotoRev.toLocaleString(), (fleetMotoTgt>0?'Target ₱'+fleetMotoTgt.toLocaleString()+' · '+varStr(totalMotoRev,fleetMotoTgt):'GTV incl rideshare: ₱'+motoGtv.toLocaleString()), '#8B5CF6')
-    + _pKPI('Go Car Trips', gocarTrips, 'Target '+gocarTgt+'/day · GTV ₱'+gocarGtv.toLocaleString(), gocarTrips>=gocarTgt?'#22C55E':gocarTrips>=gocarTgt*0.7?'#F59E0B':'#EF4444')
-    + _pKPI('Go SUV Trips', gosuvTrips, 'Target '+gosuvTgt+'/day · GTV ₱'+gosuvGtv.toLocaleString(), gosuvTrips>=gosuvTgt?'#22C55E':gosuvTrips>=gosuvTgt*0.7?'#F59E0B':'#EF4444')
-    + _pKPI('Taxi On-Track', onTrack+'/'+taxiActive, atRisk+' at-risk · '+critical+' critical', onTrack>=taxiActive*0.7?'#22C55E':'#EF4444')
+  // ── Service filter bar ────────────────────────────────────────────────────
+  var filterBar = '<div style="display:flex;gap:6px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--card);flex-wrap:wrap">'
+    + [{ id:'all', label:'All Services' }].concat(_PERF_SVCS.filter(function(s){ return Number((svc[s.vtid]||{}).trips||0) > 0 || s.vtid==='16'; }))
+      .map(function(s) {
+        var on = PERF_SVC_FILTER === s.id;
+        return '<button onclick="setPerfSvc(\'' + s.id + '\')" style="padding:4px 12px;border-radius:20px;border:1px solid '
+          + (on ? 'var(--accent)' : 'var(--border)') + ';background:' + (on ? 'var(--accent)' : 'transparent')
+          + ';color:' + (on ? '#fff' : 'var(--muted)') + ';font-size:12px;font-weight:' + (on ? '600' : '400') + ';cursor:pointer">'
+          + (s.icon ? s.icon + ' ' : '') + s.label + '</button>';
+      }).join('')
     + '</div>';
 
-  // Salaried fleet target summary — AM + PM breakdown
-  var salBlock = '<div style="padding:0 20px 20px">'
-    + '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px">'
-    + '<div style="font-size:12px;font-weight:600;margin-bottom:12px;color:var(--text)">Salaried Fleet Target vs Actual</div>'
-    + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:12px">'
-    + '<div style="background:var(--surface);border-radius:6px;padding:10px 12px">'
-    +   '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Taxi AM ('+taxiAmQty+' drivers)</div>'
-    +   '<div style="font-size:16px;font-weight:700">₱'+fleetTaxiAmTgt.toLocaleString()+'</div>'
-    +   '<div style="font-size:10px;color:var(--muted)">'+taxiAmQty+' × ₱'+taxiTarget.toLocaleString()+'/shift</div>'
-    + '</div>'
-    + '<div style="background:var(--surface);border-radius:6px;padding:10px 12px">'
-    +   '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Taxi PM ('+taxiPmQty+' drivers)</div>'
-    +   '<div style="font-size:16px;font-weight:700">₱'+fleetTaxiPmTgt.toLocaleString()+'</div>'
-    +   '<div style="font-size:10px;color:var(--muted)">'+taxiPmQty+' × ₱'+taxiTarget.toLocaleString()+'/shift</div>'
-    + '</div>'
-    + '<div style="background:var(--surface);border-radius:6px;padding:10px 12px">'
-    +   '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Moto Taxi ('+motoQty+' drivers)</div>'
-    +   '<div style="font-size:16px;font-weight:700">₱'+fleetMotoTgt.toLocaleString()+'</div>'
-    +   '<div style="font-size:10px;color:var(--muted)">'+motoQty+' × ₱'+motoTarget.toLocaleString()+'/shift</div>'
-    + '</div>'
-    + '<div style="background:var(--surface);border-radius:6px;padding:10px 12px">'
-    +   '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Combined Daily Target</div>'
-    +   '<div style="font-size:16px;font-weight:700">₱'+fleetSalTgt.toLocaleString()+'</div>'
-    +   '<div style="font-size:11px;margin-top:2px">'+varStr(totalTaxiRev+totalMotoRev, fleetSalTgt)+'</div>'
-    + '</div>'
-    + '</div>'
-    + (fleetSalTgt > 0 ? _pBar(totalTaxiRev + totalMotoRev, fleetSalTgt) : '<div style="font-size:11px;color:var(--muted)">Set driver quantities in ⚙ Targets to see fleet target bar</div>')
-    + '</div></div>';
-
-  var bepFormula = avgFare > 0
-    ? '₱'+SHIFT_COST+' cost ÷ ₱'+avgFare+' avg fare = <strong>'+bepTrips+' trips</strong>'
-    : 'No avg fare data yet — defaulting to '+bepTrips+' trips';
-  var bepBlock = '<div style="padding:0 20px 20px">'
-    + '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px">'
-    + '<div style="font-size:12px;font-weight:600;margin-bottom:4px;color:var(--text)">Break-Even Analysis · Taxi</div>'
-    + '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">'+bepFormula+'</div>'
-    + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px">'
-    + '<div><div style="font-size:11px;color:var(--muted)">BEP Trips/Shift</div><div style="font-size:17px;font-weight:700">'+bepTrips+'</div></div>'
-    + '<div><div style="font-size:11px;color:var(--muted)">Actual Avg Trips/Driver</div><div style="font-size:17px;font-weight:700">'+(taxiActive>0?Math.round(totalTrips/taxiActive):0)+'</div></div>'
-    + '<div><div style="font-size:11px;color:var(--muted)">BEP Rev (Fleet)</div><div style="font-size:17px;font-weight:700">₱'+bepRevFleet.toLocaleString()+'</div></div>'
-    + '<div><div style="font-size:11px;color:var(--muted)">Actual vs BEP</div><div style="font-size:17px;font-weight:700;color:'+(bepVarPct>=0?'#22C55E':'#EF4444')+'">'+(bepVarPct>=0?'+':'')+bepVarPct+'%</div></div>'
-    + '</div></div></div>';
-
-  return kpis + salBlock + bepBlock;
-}
-
-// ── Driver KPIs Tab ───────────────────────────────────────────────────────────
-function _perfDrivers() {
-  var taxiTarget   = _perfCfg('taxi_rev_per_shift', 2600);
-  var shiftHrs     = _perfCfg('taxi_shift_hrs', 9);
-  var motoTarget   = _perfCfg('moto_rev_per_shift', 1200);
-  var motoHrs      = _perfCfg('moto_shift_hrs', 9);
-  var gocarTgt     = _perfCfg('gocar_trips_target', 20);
-  var gosuvTgt     = _perfCfg('gosuv_trips_target', 10);
-
-  var all = (window.DB_FLEET_HEALTH || []);
-  var taxi = all.filter(function(d){ return String(d.vtid) === '16'; });
-  var moto = all.filter(function(d){ return String(d.vtid) === '1'; });
-  var gocar = all.filter(function(d){ return String(d.vtid) === '2' || String(d.vtid) === '3'; });
-
-  function lc(d) {
-    var da = Number(d.days_active||0);
-    if (da <= 14) return 'New';
-    if (da <= 45) return 'Ramping';
-    return 'Tenured';
-  }
-  // Salaried: project rev to full shift; Rideshare: trips only
-  function projSalary(d, tgtHrs) {
-    if (!d.shift_hrs_today || d.shift_hrs_today <= 0) return null;
-    return Math.round(d.rev_today / d.shift_hrs_today * tgtHrs);
-  }
-  function vpStr(actual, target) {
-    if (actual === null || !target) return '<span style="color:var(--muted)">—</span>';
-    var vp = Math.round((actual - target) / target * 100);
-    return vp >= 0 ? '<span style="color:#22C55E">+'+vp+'%</span>' : '<span style="color:#EF4444">'+vp+'%</span>';
-  }
-
-  function salaryRows(drivers, revTgt, tgtHrs) {
-    if (drivers.length === 0) return null;
-    return drivers.slice(0, 60).map(function(d){
-      var proj = projSalary(d, tgtHrs);
-      return [
-        d.name || d.id, lc(d),
-        d.trips_today || 0,
-        '₱'+(Number(d.rev_today||0)).toLocaleString(),
-        proj !== null ? '₱'+proj.toLocaleString() : '—',
-        vpStr(proj, revTgt),
-        d.avg_fare ? '₱'+Math.round(d.avg_fare) : '—',
-      ];
-    });
-  }
-
-  function rsRows(drivers, tripsTgt) {
-    if (drivers.length === 0) return null;
-    return drivers.slice(0, 60).map(function(d){
-      var trips = Number(d.trips_today || 0);
-      var vp    = tripsTgt > 0 ? Math.round((trips - tripsTgt) / tripsTgt * 100) : null;
-      return [
-        d.name || d.id, lc(d),
-        trips,
-        '₱'+(Number(d.rev_today||0)).toLocaleString(),
-        vp !== null ? (vp>=0?'<span style="color:#22C55E">+'+vp+'%</span>':'<span style="color:#EF4444">'+vp+'%</span>') : '—',
-        d.avg_fare ? '₱'+Math.round(d.avg_fare) : '—',
-      ];
-    });
-  }
-
-  // Flagged: taxi on-shift but projected critical
-  var flagged = taxi.filter(function(d){
-    if (!d.shift_hrs_today || d.shift_hrs_today <= 0) return false;
-    return (d.rev_today / d.shift_hrs_today) * shiftHrs < taxiTarget * 0.5;
+  // ── Aggregate by filter ───────────────────────────────────────────────────
+  var filtSvcs = PERF_SVC_FILTER === 'all' ? _PERF_SVCS : _PERF_SVCS.filter(function(s){ return s.vtid === PERF_SVC_FILTER; });
+  var totalRev = 0, totalTrips = 0, totalActive = 0;
+  filtSvcs.forEach(function(s) {
+    var d = svc[s.vtid] || {};
+    totalRev    += Number(d[s.rf]           || 0);
+    totalTrips  += Number(d.trips           || 0);
+    totalActive += Number(d.active_drivers  || 0);
   });
 
-  var flagBlock = '';
-  if (flagged.length > 0) {
-    flagBlock = '<div style="padding:20px 20px 0">'
-      + '<div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:12px 16px">'
-      + '<div style="font-size:12px;font-weight:600;color:#991B1B;margin-bottom:8px">⚠ '+flagged.length+' Taxi Driver'+(flagged.length>1?'s':'')+' Critical — projected <50% of ₱'+taxiTarget.toLocaleString()+'/shift target</div>'
-      + '<div style="font-size:12px;color:#7F1D1D;line-height:1.8">'
-      + flagged.slice(0,10).map(function(d){
-          var proj = projSalary(d, shiftHrs);
-          return '· '+d.name+' — proj ₱'+(proj||0)+' ('+d.trips_today+' trips)';
-        }).join('<br>')
-      + '</div></div></div>';
+  // Primary service for completion % + avg fare (taxi when all)
+  var pvtid = PERF_SVC_FILTER === 'all' ? '16' : PERF_SVC_FILTER;
+  var ps         = svc[pvtid] || {};
+  var pTrips     = Number(ps.trips     || 0);
+  var pCancelled = Number(ps.cancelled || 0);
+  var pExpired   = Number(ps.expired   || 0);
+  var pTotal     = pTrips + pCancelled + pExpired;
+  var pCompRate  = pTotal > 0 ? Math.round(pTrips / pTotal * 100) : 0;
+  var pAvgFare   = Number(ps.avg_fare  || 0);
+  var revTarget  = PERF_SVC_FILTER === 'all' ? fleetSalTgt : (PERF_SVC_FILTER === '16' ? fleetTaxiTgt : 0);
+  var svcName    = PERF_SVC_FILTER === 'all' ? 'All Services'
+    : ((_PERF_SVCS.find(function(s){ return s.vtid === PERF_SVC_FILTER; }) || {}).name || '');
+  var varPct = revTarget > 0 ? Math.round((totalRev - revTarget) / revTarget * 100) : null;
+  var varStr = varPct !== null
+    ? '<span style="font-size:13px;color:' + (varPct >= 0 ? '#22C55E' : '#EF4444') + ';font-weight:700">'
+      + (varPct >= 0 ? '+' : '') + varPct + '% vs target</span>'
+    : '<span style="font-size:12px;color:rgba(255,255,255,.4)">Set targets via \u2699\ufe0f Targets</span>';
+
+  // ── Section 1: Revenue Pulse ──────────────────────────────────────────────
+  var heroCard = '<div class="rev-intel" style="margin:12px 16px 0;border-radius:10px">'
+    + '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">'
+    // Left — giant number
+    + '<div style="flex:1;min-width:200px">'
+    + '<div class="ri-label">' + svcName + ' \u2014 Revenue Today</div>'
+    + '<div class="ri-val" style="margin:4px 0">\u20b1' + totalRev.toLocaleString() + '</div>'
+    + (revTarget > 0
+       ? '<div style="margin:6px 0 2px">' + _heroBar(totalRev, revTarget) + '</div>'
+         + '<div style="font-size:12px;color:rgba(255,255,255,.7)">' + varStr
+         + ' \u00b7 target \u20b1' + revTarget.toLocaleString() + '</div>'
+       : '<div style="margin-top:4px">' + varStr + '</div>')
+    + '</div>'
+    // Right — 4 chips
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-content:start;flex-shrink:0">'
+    + _heroChip('Trips',          totalTrips.toLocaleString())
+    + _heroChip('Active Drivers', totalActive.toLocaleString())
+    + _heroChip('Completion', pCompRate + '%', pCompRate >= 85 ? '#22C55E' : pCompRate >= 70 ? '#F59E0B' : '#EF4444')
+    + _heroChip('Avg Fare',   pAvgFare > 0 ? '\u20b1' + Math.round(pAvgFare) : '\u2014')
+    + '</div>'
+    + '</div>'
+    + '</div>';
+
+  // Contribution bars
+  var maxRev = 1;
+  _PERF_SVCS.forEach(function(s){ var r = Number((svc[s.vtid] || {})[s.rf] || 0); if (r > maxRev) maxRev = r; });
+  var contribs = '<div style="padding:10px 16px 14px;display:flex;flex-direction:column;gap:5px">'
+    + _PERF_SVCS.map(function(s) {
+      var d    = svc[s.vtid] || {};
+      var rev  = Number(d[s.rf]        || 0);
+      var trips = Number(d.trips       || 0);
+      var tot  = trips + Number(d.cancelled || 0) + Number(d.expired || 0);
+      var cr   = tot > 0 ? Math.round(trips / tot * 100) : 0;
+      var barW = Math.round(rev / maxRev * 100);
+      var barCol = rev === 0 ? 'var(--border)' : cr >= 85 ? '#22C55E' : cr >= 70 ? '#F59E0B' : '#64748B';
+      var dimmed = PERF_SVC_FILTER !== 'all' && PERF_SVC_FILTER !== s.vtid;
+      return '<div style="display:flex;align-items:center;gap:8px;opacity:' + (dimmed ? '.35' : '1') + '">'
+        + '<span style="font-size:15px;width:20px;text-align:center;flex-shrink:0">' + s.icon + '</span>'
+        + '<div style="width:82px;font-size:12px;font-weight:500;flex-shrink:0;color:var(--text)">' + s.name + '</div>'
+        + '<div style="flex:1;height:7px;background:var(--border);border-radius:4px;overflow:hidden">'
+        + '<div style="height:7px;width:' + barW + '%;background:' + barCol + ';border-radius:4px;transition:width .4s"></div>'
+        + '</div>'
+        + '<div style="font-size:12px;font-weight:700;width:78px;text-align:right;flex-shrink:0">'
+        + (rev > 0 ? '\u20b1' + rev.toLocaleString() : '<span style="color:var(--muted)">\u2014</span>') + '</div>'
+        + '<div style="font-size:11px;color:var(--muted);width:46px;text-align:right;flex-shrink:0">' + trips + ' trips</div>'
+        + '<div style="font-size:11px;width:34px;text-align:right;flex-shrink:0;color:' + barCol + '">' + (cr > 0 ? cr + '%' : '') + '</div>'
+        + '</div>';
+    }).join('')
+    + '</div>';
+
+  var section1 = '<div style="background:var(--card);border-bottom:2px solid var(--border)">' + heroCard + contribs + '</div>';
+
+  // ── Section 2: Driver Performance Feed ───────────────────────────────────
+  var taxiFleet   = fleet.filter(function(d){ return d.vtid === '16'; });
+  var filtFleet   = PERF_SVC_FILTER === 'all' ? fleet : fleet.filter(function(d){ return d.vtid === PERF_SVC_FILTER; });
+  var activeFleet = filtFleet.filter(function(d){ return d.trips_today > 0; }).slice().sort(function(a, b) {
+    var ap = a.shift_hrs_today > 0 ? a.rev_today / a.shift_hrs_today * shiftHrs : a.rev_today;
+    var bp = b.shift_hrs_today > 0 ? b.rev_today / b.shift_hrs_today * shiftHrs : b.rev_today;
+    return bp - ap;
+  });
+  var showCount = PERF_SHOW_ALL ? activeFleet.length : Math.min(15, activeFleet.length);
+  var hasMore   = activeFleet.length > 15;
+
+  // Driver table — skeleton if no fleet data
+  var driverContent;
+  if (fleet.length === 0) {
+    driverContent = '<div style="padding-bottom:8px">'
+      + '<div style="padding:10px 14px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">Waiting for driver data\u2026</div>'
+      + Array(8).fill(0).map(function() {
+          return '<div style="display:flex;gap:8px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--border)">'
+            + '<div class="skel" style="width:110px;height:11px"></div>'
+            + '<div class="skel" style="width:28px;height:11px"></div>'
+            + '<div class="skel" style="width:28px;height:11px"></div>'
+            + '<div class="skel" style="width:44px;height:11px"></div>'
+            + '<div class="skel" style="width:52px;height:11px"></div>'
+            + '<div class="skel" style="width:50px;height:11px"></div>'
+            + '</div>';
+        }).join('')
+      + '</div>';
+  } else {
+    var driverRows = activeFleet.slice(0, showCount).map(function(d) {
+      var pace  = d.shift_hrs_today > 0 ? Math.round(d.rev_today / d.shift_hrs_today) : 0;
+      var proj  = d.shift_hrs_today > 0 ? Math.round(d.rev_today / d.shift_hrs_today * shiftHrs) : d.rev_today;
+      var statusHtml;
+      if (d.vtid === '16') {
+        if      (proj >= taxiRevTgt)            statusHtml = '<span style="color:#22C55E;font-size:11px">\ud83d\udfe2 On Track</span>';
+        else if (proj >= taxiRevTgt * 0.7)      statusHtml = '<span style="color:#F59E0B;font-size:11px">\ud83d\udfe1 At Risk</span>';
+        else                                    statusHtml = '<span style="color:#EF4444;font-size:11px">\ud83d\udd34 Struggling</span>';
+      } else {
+        statusHtml = '<span style="font-size:11px;color:var(--muted)">' + d.trips_today + ' trips</span>';
+      }
+      // Derive shift from ASHIFTS actual_start hour
+      var shiftLabel = '\u2014';
+      var ashifts = window.ASHIFTS || [];
+      var shiftRec = ashifts.find(function(s){ return String(s.driver_id) === String(d.id) || String(s.rider_id) === String(d.id); });
+      if (shiftRec && shiftRec.actual_start) {
+        var h = new Date(shiftRec.actual_start).getHours();
+        shiftLabel = h < 13 ? 'AM' : 'PM';
+      } else if (shiftRec && shiftRec.shift_code) {
+        shiftLabel = String(shiftRec.shift_code).includes('AM') ? 'AM' : 'PM';
+      }
+      return [
+        '<span style="font-size:12px;font-weight:500">' + (d.name || d.id) + '</span>',
+        shiftLabel,
+        d.trips_today,
+        pace > 0 ? '\u20b1' + pace : '\u2014',
+        d.vtid === '16' ? '\u20b1' + proj.toLocaleString() : '\u2014',
+        statusHtml,
+      ];
+    });
+    driverContent = _pTable(['Driver','Shift','Trips','Pace/hr','Projected','Status'], driverRows, 'No active drivers')
+      + (hasMore ? '<div style="padding:8px 14px;text-align:center;border-top:1px solid var(--border)">'
+        + '<button onclick="togglePerfAll()" style="font-size:12px;color:var(--accent);background:none;border:none;cursor:pointer;padding:4px 8px">'
+        + (PERF_SHOW_ALL ? '\u25b2 Show less' : '\u25bc Show all ' + activeFleet.length + ' drivers') + '</button></div>' : '');
   }
 
-  var salHeaders = ['Driver','Tier','Trips','Revenue','Projected','vs Target','Avg Fare'];
-  var rsHeaders  = ['Driver','Tier','Trips','Revenue','vs Trip Tgt','Avg Fare'];
+  var section2 = '<div style="display:flex;border-bottom:2px solid var(--border)">'
+    // Left 60%
+    + '<div style="flex:3;border-right:1px solid var(--border);min-width:0;overflow:auto">'
+    + '<div style="padding:9px 14px;font-size:12px;font-weight:600;border-bottom:1px solid var(--border);background:var(--surface);display:flex;justify-content:space-between;align-items:center">'
+    + '<span>Active Drivers <span style="font-weight:400;color:var(--muted)">(' + (fleet.length > 0 ? activeFleet.length : '\u2026') + ')</span></span>'
+    + (fleet.length > 0 ? '<span style="font-size:11px;color:var(--muted)">' + filtFleet.length + ' on fleet</span>' : '')
+    + '</div>'
+    + driverContent
+    + '</div>'
+    // Right 40%
+    + '<div style="flex:2;min-width:0">'
+    + '<div style="padding:9px 14px;font-size:12px;font-weight:600;border-bottom:1px solid var(--border);background:var(--surface)">Shift Summary</div>'
+    + _buildShiftSummary(taxiFleet, taxiRevTgt, shiftHrs)
+    + '<div style="padding:9px 14px;font-size:12px;font-weight:600;border-bottom:1px solid var(--border);border-top:1px solid var(--border);background:var(--surface);margin-top:1px">Pods</div>'
+    + _buildPodSummary(taxiFleet, taxiRevTgt, shiftHrs)
+    + '</div>'
+    + '</div>';
 
-  var taxiRows   = salaryRows(taxi.filter(function(d){ return Number(d.trips_today||0) > 0; }), taxiTarget, shiftHrs);
-  var motoRows   = salaryRows(moto.filter(function(d){ return Number(d.trips_today||0) > 0; }), motoTarget, motoHrs);
-  var gocar2     = all.filter(function(d){ return String(d.vtid) === '2'; });
-  var gosuv      = all.filter(function(d){ return String(d.vtid) === '3'; });
-  var gocarRows  = rsRows(gocar2.filter(function(d){ return Number(d.trips_today||0) > 0; }), Math.round(gocarTgt / Math.max(gocar2.length, 1)));
-  var gosuvRows  = rsRows(gosuv.filter(function(d){ return Number(d.trips_today||0) > 0; }), Math.round(gosuvTgt / Math.max(gosuv.length, 1)));
+  // ── Section 3: Economics (collapsible) ────────────────────────────────────
+  var shiftCostCfg = _perfCfg('driver_shift_cost', 1432);
+  var avgFareLive  = Number((svc['16'] || {}).avg_fare || 0);
+  var avgFareUsed  = avgFareLive || _perfCfg('fallback_avg_fare', 159);
+  var bepTrips     = avgFareUsed > 0 ? Math.ceil(shiftCostCfg / avgFareUsed) : 8;
+  var bepFormula   = '\u20b1' + shiftCostCfg + ' shift cost \u00f7 \u20b1' + avgFareUsed + ' avg fare = <strong>' + bepTrips + ' trips</strong>'
+    + (avgFareLive > 0 ? ' <span style="background:#22C55E;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;vertical-align:middle">Live</span>' : '');
 
-  function section(title, rows, hdrs) {
-    return '<div style="padding:0 20px 20px">'
-      + '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--text)">'+title+'</div>'
-      + '<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card)">'
-      + _pTable(hdrs, rows, 'No active drivers today')
+  var econBody = PERF_ECON_OPEN ? (
+    '<div style="padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">'
+    // BEP card
+    + '<div style="background:var(--card);border:1px solid var(--border);border-top:3px solid #6366F1;border-radius:8px;padding:14px 16px">'
+    + '<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px">Break-Even / Shift</div>'
+    + '<div style="font-size:28px;font-weight:700;color:var(--text)">' + bepTrips + ' trips</div>'
+    + '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">' + bepFormula + '</div>'
+    + '</div>'
+    // Fleet target
+    + '<div style="background:var(--card);border:1px solid var(--border);border-top:3px solid #0EA5E9;border-radius:8px;padding:14px 16px">'
+    + '<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px">Fleet Daily Target</div>'
+    + '<div style="font-size:28px;font-weight:700;color:var(--text)">' + (fleetSalTgt > 0 ? '\u20b1' + fleetSalTgt.toLocaleString() : '\u2014') + '</div>'
+    + '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">'
+    + 'AM: ' + taxiAmQty + ' \u00d7 \u20b1' + taxiRevTgt.toLocaleString() + ' = \u20b1' + (taxiAmQty * taxiRevTgt).toLocaleString() + '<br>'
+    + 'PM: ' + taxiPmQty + ' \u00d7 \u20b1' + taxiRevTgt.toLocaleString() + ' = \u20b1' + (taxiPmQty * taxiRevTgt).toLocaleString()
+    + '</div>'
+    + (fleetSalTgt > 0 ? _pBar(totalRev, fleetSalTgt) : '<div style="font-size:11px;color:var(--muted);margin-top:6px">Set driver qty in \u2699\ufe0f Targets</div>')
+    + '</div>'
+    // Cost model
+    + '<div style="background:var(--card);border:1px solid var(--border);border-top:3px solid #F59E0B;border-radius:8px;padding:14px 16px">'
+    + '<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px">Driver Shift Cost</div>'
+    + '<div style="font-size:28px;font-weight:700;color:var(--text)">\u20b1' + shiftCostCfg.toLocaleString() + '</div>'
+    + '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">per driver per shift<br>Edit in Unit Economics</div>'
+    + '<button class="btn btn-s" onclick="showUnitEconomics()" style="margin-top:8px;font-size:11px">Edit \u2197</button>'
+    + '</div>'
+    + '</div>'
+  ) : '';
+
+  var section3 = '<div>'
+    + '<div onclick="togglePerfEcon()" style="padding:10px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;background:var(--surface);border-top:1px solid var(--border)">'
+    + '<span style="font-size:12px;font-weight:600">Unit Economics</span>'
+    + '<span style="font-size:11px;color:var(--muted)">' + (PERF_ECON_OPEN ? '\u25b2 Collapse' : '\u25b6 Expand') + '</span>'
+    + '</div>'
+    + econBody
+    + '</div>';
+
+  el.innerHTML = filterBar + section1 + section2 + section3;
+}
+
+function _buildShiftSummary(taxiDrivers, revTarget, shiftHrs) {
+  if (taxiDrivers.length === 0) {
+    return '<div style="padding:10px 14px;font-size:12px;color:var(--muted)">No taxi driver data yet</div>';
+  }
+  var ashifts = window.ASHIFTS || [];
+
+  function getShift(d) {
+    var rec = ashifts.find(function(s){ return String(s.driver_id) === String(d.id) || String(s.rider_id) === String(d.id); });
+    if (!rec) return null;
+    if (rec.shift_code) return String(rec.shift_code).includes('AM') ? 'AM' : 'PM';
+    if (rec.actual_start) return new Date(rec.actual_start).getHours() < 13 ? 'AM' : 'PM';
+    return null;
+  }
+
+  function shiftStats(drivers) {
+    var active = drivers.filter(function(d){ return d.trips_today > 0; });
+    var totRev = active.reduce(function(s,d){ return s + d.rev_today; }, 0);
+    var paceSum = active.reduce(function(s,d){ return s + (d.shift_hrs_today > 0 ? d.rev_today / d.shift_hrs_today : 0); }, 0);
+    var avgPace = active.length > 0 ? Math.round(paceSum / active.length) : 0;
+    var onTrack = 0, atRisk = 0;
+    active.forEach(function(d) {
+      var proj = d.shift_hrs_today > 0 ? (d.rev_today / d.shift_hrs_today) * shiftHrs : 0;
+      if      (proj >= revTarget)        onTrack++;
+      else if (proj >= revTarget * 0.7)  atRisk++;
+    });
+    var struggling = active.length - onTrack - atRisk;
+    return { count: active.length, rev: totRev, avgPace: avgPace, onTrack: onTrack, atRisk: atRisk, struggling: Math.max(0, struggling) };
+  }
+
+  function shiftCard(label, drivers) {
+    var st = shiftStats(drivers);
+    return '<div style="padding:10px 14px;border-bottom:1px solid var(--border)">'
+      + '<div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em">' + label + ' \u2014 ' + st.count + ' active</div>'
+      + '<div style="display:flex;gap:14px;margin-bottom:8px">'
+      + '<div><div style="font-size:10px;color:var(--muted)">Revenue</div><div style="font-size:14px;font-weight:700">\u20b1' + st.rev.toLocaleString() + '</div></div>'
+      + '<div><div style="font-size:10px;color:var(--muted)">Avg Pace</div><div style="font-size:14px;font-weight:700">\u20b1' + st.avgPace + '/hr</div></div>'
+      + '</div>'
+      + '<div style="display:flex;height:5px;border-radius:3px;overflow:hidden;background:var(--border)">'
+      + '<div style="flex:' + (st.onTrack || 0) + ';background:#22C55E;transition:flex .3s" title="On Track: ' + st.onTrack + '"></div>'
+      + '<div style="flex:' + (st.atRisk || 0) + ';background:#F59E0B;transition:flex .3s" title="At Risk: ' + st.atRisk + '"></div>'
+      + '<div style="flex:' + (st.struggling || 0) + ';background:#EF4444;transition:flex .3s" title="Struggling: ' + st.struggling + '"></div>'
+      + '<div style="flex:' + Math.max(1, st.count === 0 ? 1 : 0) + ';background:var(--border)"></div>'
+      + '</div>'
+      + '<div style="font-size:10px;color:var(--muted);margin-top:3px">'
+      + '<span style="color:#22C55E">' + st.onTrack + ' on-track</span>'
+      + ' \u00b7 <span style="color:#F59E0B">' + st.atRisk + ' at-risk</span>'
+      + ' \u00b7 <span style="color:#EF4444">' + st.struggling + ' struggling</span>'
       + '</div></div>';
   }
 
-  var out = flagBlock + '<div style="padding:12px 20px 4px"><div style="font-size:11px;color:var(--muted)">'
-    + 'Salaried: Projected = (revenue ÷ hours worked) × shift hrs target &nbsp;·&nbsp; Rideshare: vs trip count target (fleet-level ÷ active drivers)</div></div>';
-  out += section('Taxi — Active Today (target ₱'+taxiTarget.toLocaleString()+'/shift)', taxiRows, salHeaders);
-  if (motoRows) out += section('Moto Taxi — Active Today (target ₱'+motoTarget.toLocaleString()+'/shift)', motoRows, salHeaders);
-  if (gocarRows) out += section('Go Car — Active Today (target '+gocarTgt+' trips/day fleet)', gocarRows, rsHeaders);
-  if (gosuvRows) out += section('Go SUV — Active Today (target '+gosuvTgt+' trips/day fleet)', gosuvRows, rsHeaders);
+  var amDrivers = ashifts.length > 0 ? taxiDrivers.filter(function(d){ return getShift(d) === 'AM'; }) : taxiDrivers;
+  var pmDrivers = ashifts.length > 0 ? taxiDrivers.filter(function(d){ return getShift(d) === 'PM'; }) : [];
+  var unscheduled = ashifts.length > 0
+    ? taxiDrivers.filter(function(d){ return getShift(d) === null && d.trips_today > 0; }) : [];
 
-  return out;
+  var html = '';
+  if (ashifts.length > 0 && (amDrivers.length > 0 || pmDrivers.length > 0)) {
+    if (amDrivers.length > 0) html += shiftCard('AM Shift', amDrivers);
+    if (pmDrivers.length > 0) html += shiftCard('PM Shift', pmDrivers);
+    if (unscheduled.length > 0) html += shiftCard('Unscheduled', unscheduled);
+  } else {
+    html += shiftCard('Taxi Fleet', taxiDrivers);
+  }
+  return html;
 }
 
-// ── Pod KPIs Tab ──────────────────────────────────────────────────────────────
-function _perfPods() {
-  var taxiTarget = _perfCfg('taxi_rev_per_shift', 2600);
-  var shiftHrs   = _perfCfg('taxi_shift_hrs', 9);
+function _buildPodSummary(taxiDrivers, revTarget, shiftHrs) {
   var pods = window.PODS || {};
-  var fleet = window.DB_FLEET_HEALTH || [];
-
   var podIds = Object.keys(pods);
   if (podIds.length === 0) {
-    return '<div style="padding:40px;text-align:center;color:var(--muted)">No pods configured. Set up pods in the Pods page first.</div>';
+    return '<div style="padding:10px 14px;font-size:12px;color:var(--muted)">No pods configured</div>';
   }
-
-  var rows = podIds.map(function(pid){
-    var pod  = pods[pid];
+  var rows = podIds.map(function(pid) {
+    var pod = pods[pid];
     var members = (pod.members || []).map(function(mid){
-      return fleet.find(function(d){ return String(d.id) === String(mid); });
+      return taxiDrivers.find(function(d){ return String(d.id) === String(mid); });
     }).filter(Boolean);
-    var active   = members.filter(function(d){ return Number(d.trips_today||0) > 0; });
-    var totRev   = members.reduce(function(s,d){ return s+Number(d.rev_today||0); },0);
-    var totTrips = members.reduce(function(s,d){ return s+Number(d.trips_today||0); },0);
-    var podTarget= members.length * taxiTarget;
-    var vp       = podTarget > 0 ? Math.round((totRev - podTarget) / podTarget * 100) : 0;
-    var onTrack  = members.filter(function(d){
-      if (!d.shift_hrs_today||d.shift_hrs_today<=0) return false;
-      return (d.rev_today/d.shift_hrs_today)*shiftHrs >= taxiTarget;
-    }).length;
-    return [
-      pod.name || pid,
-      members.length,
-      active.length,
-      totTrips,
-      '₱'+totRev.toLocaleString(),
-      '₱'+podTarget.toLocaleString(),
-      _rag(vp >= 0 ? '+'+vp+'%' : vp+'%', '0%', '10%').replace('0%',0).replace('10%',10),
-      onTrack+'/'+active.length,
-    ];
-  });
+    var active  = members.filter(function(d){ return d.trips_today > 0; });
+    var totRev  = active.reduce(function(s,d){ return s + d.rev_today; }, 0);
+    var podTgt  = members.length * revTarget;
+    var vp      = podTgt > 0 ? Math.round((totRev - podTgt) / podTgt * 100) : null;
+    var captain = pod.captain_name || (pod.captain_id
+      ? ((taxiDrivers.find(function(d){ return String(d.id) === String(pod.captain_id); }) || {}).name || '\u2014')
+      : '\u2014');
+    return { name: pod.name || pid, rev: totRev, vp: vp, captain: captain, active: active.length, total: members.length };
+  }).sort(function(a, b){ return b.rev - a.rev; });
 
-  // Sort by revenue desc
-  rows.sort(function(a,b){
-    var ra = parseInt(String(a[4]).replace(/[^\d]/g,'')) || 0;
-    var rb = parseInt(String(b[4]).replace(/[^\d]/g,'')) || 0;
-    return rb - ra;
-  });
-
-  return '<div style="padding:20px">'
-    + '<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card)">'
-    + _pTable(['Pod','Members','Active','Trips','Revenue','Rev Target','vs Target','On-Track'], rows)
-    + '</div>'
-    + '<div style="font-size:11px;color:var(--muted);margin-top:8px">Revenue target = drivers × ₱'+taxiTarget.toLocaleString()+'/shift · On-track = projected ≥ target</div>'
+  return '<div style="padding:4px 0">'
+    + rows.map(function(r) {
+        var vpHtml = r.vp !== null
+          ? '<span style="font-size:10px;font-weight:600;color:' + (r.vp >= 0 ? '#22C55E' : '#EF4444') + '">' + (r.vp >= 0 ? '+' : '') + r.vp + '%</span>'
+          : '';
+        return '<div style="padding:5px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)">'
+          + '<div style="flex:1;min-width:0">'
+          + '<div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + r.name + '</div>'
+          + '<div style="font-size:10px;color:var(--muted)">' + r.active + '/' + r.total + ' active \u00b7 cap: ' + r.captain + '</div>'
+          + '</div>'
+          + '<div style="text-align:right;flex-shrink:0">'
+          + '<div style="font-size:12px;font-weight:600">\u20b1' + r.rev.toLocaleString() + '</div>'
+          + vpHtml
+          + '</div></div>';
+      }).join('')
     + '</div>';
-}
-
-// ── Company KPIs Tab ──────────────────────────────────────────────────────────
-function _perfCompany() {
-  var shiftHrs    = _perfCfg('taxi_shift_hrs', 9);
-  var utilTarget  = _perfCfg('util_target', 70);
-  var commTarget  = _perfCfg('commission_pct_target', 20);
-  var taxiQty     = _perfCfg('taxi_am_qty', 0) + _perfCfg('taxi_pm_qty', 0);
-  var motoQty     = _perfCfg('moto_qty', 0);
-  var taxiRevTgt  = _perfCfg('taxi_rev_per_shift', 2600);
-  var motoRevTgt  = _perfCfg('moto_rev_per_shift', 1200);
-  var fleetSalTgt = taxiQty * taxiRevTgt + motoQty * motoRevTgt;
-
-  var fleet   = window.DB_FLEET_HEALTH || [];
-  var taxi    = fleet.filter(function(d){ return String(d.vtid)==='16'; });
-  var svc     = window.DB_SERVICES || {};
-
-  // Utilization = in_trip_hrs / (active_drivers × shift_hrs)
-  var taxiActive   = taxi.filter(function(d){ return Number(d.trips_today||0) > 0; }).length;
-  var inTripHrs    = taxi.reduce(function(s,d){ return s+Number(d.in_trip_hrs_today||0); }, 0);
-  var maxHrs       = taxiActive * shiftHrs;
-  var utilPct      = maxHrs > 0 ? Math.round(inTripHrs / maxHrs * 100) : 0;
-
-  // Rideshare commission
-  var rsGtv   = [1,2,3].reduce(function(s,id){ return s+Number((svc[id]||{}).gtv||0); },0);
-  var rsComm  = [1,2,3].reduce(function(s,id){ return s+Number((svc[id]||{}).commission||0); },0);
-  var commPct = rsGtv > 0 ? (rsComm / rsGtv * 100).toFixed(1) : 0;
-
-  // Total GTV
-  var taxiRev   = taxi.reduce(function(s,d){ return s+Number(d.rev_today||0); },0);
-  var totalGtv  = taxiRev + rsGtv;
-  var gtvVarPct = fleetSalTgt > 0 ? Math.round((totalGtv - fleetSalTgt) / fleetSalTgt * 100) : 0;
-
-  // Cancellations
-  var taxiCancelled = Number(((window.DB_TODAY)||{}).app_cancelled || 0);
-  var taxiExpired   = Number(((window.DB_TODAY)||{}).app_expired || 0);
-  var taxiCompleted = Number(((window.DB_TODAY)||{}).app_completed || 0);
-  var cancelRate    = (taxiCompleted + taxiCancelled) > 0
-    ? Math.round(taxiCancelled / (taxiCompleted + taxiCancelled) * 100) : 0;
-
-  var kpis = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;padding:20px">'
-    + _pKPI('Fleet GTV', '₱'+totalGtv.toLocaleString(), fleetSalTgt>0?((gtvVarPct>=0?'+':'')+gtvVarPct+'% vs salaried target'):'Set fleet qty in ⚙ Targets', fleetSalTgt>0?(gtvVarPct>=0?'#22C55E':'#EF4444'):'#6366F1')
-    + _pKPI('Taxi Utilization', utilPct+'%', 'in-trip hrs / max hrs · target '+utilTarget+'%', utilPct>=utilTarget?'#22C55E':utilPct>=utilTarget*0.7?'#F59E0B':'#EF4444')
-    + _pKPI('Rideshare Commission', '₱'+rsComm.toLocaleString(), commPct+'% of GTV · target '+commTarget+'%', parseFloat(commPct)>=commTarget?'#22C55E':'#F59E0B')
-    + _pKPI('App Cancel Rate', cancelRate+'%', taxiCancelled+' cancelled / '+taxiCompleted+' completed', cancelRate<=10?'#22C55E':cancelRate<=20?'#F59E0B':'#EF4444')
-    + _pKPI('Expired Bookings', taxiExpired, 'no driver accepted', taxiExpired<=5?'#22C55E':taxiExpired<=15?'#F59E0B':'#EF4444')
-    + _pKPI('Active Taxi Drivers', taxiActive, 'on shift today', '#0EA5E9')
-    + '</div>';
-
-  // Utilization bands
-  var bands = [
-    { label: 'High (≥70%)', min: 70,  max: 999, color: '#22C55E' },
-    { label: 'Mid (50–70%)', min: 50,  max: 70,  color: '#F59E0B' },
-    { label: 'Low (<50%)',   min: 0,   max: 50,  color: '#EF4444' },
-  ];
-  var bandRows = bands.map(function(b){
-    var count = taxi.filter(function(d){
-      if (!d.shift_hrs_today || d.shift_hrs_today <= 0) return false;
-      var u = d.in_trip_hrs_today > 0 ? Math.round(d.in_trip_hrs_today / d.shift_hrs_today * 100) : 0;
-      return u >= b.min && u < b.max;
-    }).length;
-    return ['<span style="color:'+b.color+'">■</span> '+b.label, count, Math.round(count/Math.max(taxiActive,1)*100)+'%'];
-  });
-
-  var bandsBlock = '<div style="padding:0 20px 20px">'
-    + '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
-    + '<div style="padding:12px 16px;font-size:12px;font-weight:600;border-bottom:1px solid var(--border)">Taxi Driver Utilization Bands</div>'
-    + _pTable(['Band','Drivers','Share'], bandRows)
-    + '</div></div>';
-
-  return kpis + bandsBlock;
-}
-
-// ── Unit Economics Tab ────────────────────────────────────────────────────────
-function _perfEconomics() {
-  var taxiTarget  = _perfCfg('taxi_rev_per_shift', 2600);
-  var shiftHrs    = _perfCfg('taxi_shift_hrs', 9);
-
-  var fleet  = window.DB_FLEET_HEALTH || [];
-  var taxi   = fleet.filter(function(d){ return String(d.vtid)==='16'; });
-  var active = taxi.filter(function(d){ return Number(d.trips_today||0) > 0; });
-
-  var totRev    = active.reduce(function(s,d){ return s+Number(d.rev_today||0); },0);
-  var totTrips  = active.reduce(function(s,d){ return s+Number(d.trips_today||0); },0);
-  var avgFare   = totTrips > 0 ? Math.round(totRev / totTrips) : 0;
-  var avgRevHr  = active.length > 0 ? Math.round(totRev / active.length / shiftHrs) : 0;
-
-  // Per-vehicle P&L estimates (illustrative, using rev as revenue proxy)
-  // Cost structure constants (configurable in future)
-  var FUEL_PER_HR  = 80;   // ₱/hr estimated fuel
-  var DRIVER_BASE  = 400;  // ₱/shift base
-  var OVERHEAD_PCT = 0.08; // 8% overhead on revenue
-
-  var pRows = active.slice(0,40).map(function(d){
-    var rev      = Number(d.rev_today || 0);
-    var hrs      = Number(d.shift_hrs_today || shiftHrs);
-    var fuel     = Math.round(hrs * FUEL_PER_HR);
-    var overhead = Math.round(rev * OVERHEAD_PCT);
-    var totalCost= DRIVER_BASE + fuel + overhead;
-    var gross    = rev - totalCost;
-    var margin   = rev > 0 ? Math.round(gross / rev * 100) : 0;
-    return [
-      d.name || d.id,
-      d.trips_today,
-      '₱'+rev.toLocaleString(),
-      '₱'+DRIVER_BASE,
-      '₱'+fuel,
-      '₱'+overhead,
-      '₱'+totalCost.toLocaleString(),
-      _rag(gross >= 0 ? '₱'+gross.toLocaleString() : '-₱'+Math.abs(gross).toLocaleString(), '₱0', '₱500'),
-      _rag(margin+'%', '0%', '20%').replace('0%',0).replace('20%',20),
-    ];
-  });
-
-  // Summary row
-  var summaryBlock = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;padding:20px">'
-    + _pKPI('Avg Rev/Shift Hr', '₱'+avgRevHr, 'Taxi · target ₱'+(Math.round(taxiTarget/shiftHrs)), '#0EA5E9')
-    + _pKPI('Avg Fare', '₱'+avgFare, totTrips+' completed trips', '#6366F1')
-    + _pKPI('Fuel Est/Driver', '₱'+Math.round(shiftHrs*FUEL_PER_HR), 'at ₱'+FUEL_PER_HR+'/hr', '#F59E0B')
-    + _pKPI('Est Base Cost', '₱'+DRIVER_BASE, 'per shift', '#8B5CF6')
-    + '</div>';
-
-  var tableBlock = '<div style="padding:0 20px 20px">'
-    + '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Cost model: Base ₱'+DRIVER_BASE+' + Fuel ₱'+FUEL_PER_HR+'/hr + '+Math.round(OVERHEAD_PCT*100)+'% overhead. Indicative only.</div>'
-    + '<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card)">'
-    + _pTable(['Driver','Trips','Revenue','Base','Fuel','Overhead','Total Cost','Gross','Margin'], pRows, 'No active drivers today')
-    + '</div></div>';
-
-  return summaryBlock + tableBlock;
 }
 // ─── END PERFORMANCE & ECONOMICS ─────────────────────────────────────────────
 
