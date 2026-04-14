@@ -4307,7 +4307,7 @@ const _exp = {
   ackBrief, showCheckinForm, saveCheckin, showIncidentForm, saveIncident, resolveIncident, renderFleetMgmtTab, showSwapMember,
   updateSwapTargetDrivers, executeSwap, showAddToPod, addMemberToPod, removePodMember,
   buildPerformance, setPerfTab, showPerfConfig, savePerfConfig,
-  setPerfSvc, togglePerfEcon, togglePerfAll, setPerfDetailTab, setPerfDriverSort, setPerfTableSvc,
+  setPerfSvc, togglePerfEcon, togglePerfAll, setPerfDetailTab, setPerfDriverSort, setPerfTableSvc, setPerfDate,
   _renderPerfCfgTab, _perfCfgFlushTab,
 };;;;;;
 try { Object.assign(window, _exp); } catch(e) { document.body.innerHTML = '<div style="padding:20px;background:#FEF2F2;color:#991B1B;font-family:monospace">Boot error: ' + e.message + '</div>'; }
@@ -7883,6 +7883,13 @@ try{window.addEventListener('resize',function(){try{_schedResize();}catch(e){}})
 try{_addSettingsToNav();}catch(e){}
 try{_injectViewToggle('fleet');}catch(e){}
 
+// Returns the hour (0-23) of a date string in Asia/Manila timezone
+function _phtHour(dateStr) {
+  try {
+    return Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: 'Asia/Manila' }).format(new Date(dateStr)));
+  } catch(e) { return new Date(dateStr).getHours(); }
+}
+
 // ─── PERFORMANCE & ECONOMICS ─────────────────────────────────────────────────
 var PERF_CONFIG = (function(){
   try { return JSON.parse(lsGet('PERF_CONFIG') || '{}'); } catch(e){ return {}; }
@@ -7893,6 +7900,8 @@ var PERF_SVC_FILTER   = 'all';
 var PERF_DETAIL_TAB   = 'drivers';
 var PERF_DRIVER_SORT  = { col: 'proj', dir: -1 };
 var PERF_TABLE_SVC    = 'all';  // driver table service filter — independent of hero filter bar
+var PERF_DATE         = null;   // null = today PHT; 'YYYY-MM-DD' = date override
+var PERF_DATE_LOADING = false;
 
 function _perfCfg(k, def) {
   return (PERF_CONFIG[k] !== undefined && PERF_CONFIG[k] !== '') ? Number(PERF_CONFIG[k]) : def;
@@ -7912,6 +7921,34 @@ function setPerfDriverSort(col) {
   buildPerformance();
 }
 function setPerfTableSvc(s) { PERF_TABLE_SVC = s; buildPerformance(); }
+
+function setPerfDate(dateVal) {
+  var todayPHT = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+  PERF_DATE = (dateVal && dateVal !== todayPHT) ? dateVal : null;
+  if (PERF_DATE === null) {
+    // Today — use already-loaded DB_FLEET_HEALTH
+    buildPerformance();
+    return;
+  }
+  PERF_DATE_LOADING = true;
+  buildPerformance();  // show loading state immediately
+  var body = JSON.stringify({ type: 'fleet_supply_health', day_start_hour: OPS_DAY_CONFIG.day_start_hour || 4, date_override: PERF_DATE });
+  fetch(DB_EDGE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': SUPA_KEY }, body: body })
+    .then(function(r){ return r.json(); })
+    .then(function(res) {
+      PERF_DATE_LOADING = false;
+      if (res.data && res.data.length) {
+        DB_FLEET_HEALTH = res.data.map(function(r) {
+          return { vtid:String(r.vehicle_type_id||''), id:String(r.driver_id||''), name:String(r.driver_name||'Driver'), lifecycle:String(r.lifecycle||'Unknown'), days_active:Number(r.days_since_activation||0), trips_today:Number(r.trips_today||0), rev_today:Number(r.rev_today||0), commission_today:Number(r.commission_today||0), trips_mtd:Number(r.trips_mtd||0), rev_mtd:Number(r.rev_mtd||0), shift_hrs_today:Number(r.shift_hrs_today||0), in_trip_hrs_today:Number(r.in_trip_hrs_today||0), avg_fare:Number(r.avg_fare_today||0), incentives_mtd:Number(r.incentives_mtd||0), avg_rating:Number(r.avg_rating||0), rev_per_shift_hr:Number(r.shift_hrs_today)>0?Math.round(Number(r.rev_today)/Number(r.shift_hrs_today)):0 };
+        });
+        toast('\u2713 Data loaded for ' + PERF_DATE);
+      } else {
+        toast('No driver data for ' + PERF_DATE, 3000);
+      }
+      buildPerformance();
+    })
+    .catch(function(e) { PERF_DATE_LOADING = false; toast('Failed to load date data', 3000); buildPerformance(); });
+}
 
 // ── Config modal ──────────────────────────────────────────────────────────────
 var _perfCfgTab   = 'taxi';
@@ -8118,8 +8155,10 @@ function buildPerformance() {
   var fleetMotoTgt = (motoAmQty + motoPmQty) * motoRevTgt;
   var fleetSalTgt  = fleetTaxiTgt + fleetMotoTgt;
 
-  // ── Service filter bar ────────────────────────────────────────────────────
-  var filterBar = '<div style="display:flex;gap:6px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--card);flex-wrap:wrap">'
+  // ── Filter bar (service pills + date picker) ──────────────────────────────
+  var todayPHT = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+  var dateLabel = PERF_DATE ? PERF_DATE : 'Today · ' + new Date().toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', day: 'numeric', month: 'short' }) + ' PHT';
+  var filterBar = '<div style="display:flex;gap:6px;padding:8px 16px;border-bottom:1px solid var(--border);background:var(--card);flex-wrap:wrap;align-items:center">'
     + [{ vtid:'all', name:'All Services' }].concat(_PERF_SVCS.filter(function(s){ return Number((svc[s.vtid]||{}).trips||0) > 0 || s.vtid==='16'; }))
       .map(function(s) {
         var on = PERF_SVC_FILTER === s.vtid;
@@ -8128,6 +8167,10 @@ function buildPerformance() {
           + ';color:' + (on ? '#fff' : 'var(--muted)') + ';font-size:12px;font-weight:' + (on ? '600' : '400') + ';cursor:pointer">'
           + (s.icon ? s.icon + ' ' : '') + s.name + '</button>';
       }).join('')
+    + '<div style="margin-left:auto;display:flex;align-items:center;gap:6px">'
+    + (PERF_DATE ? '<button onclick="setPerfDate(null)" style="padding:3px 8px;border-radius:12px;border:1px solid var(--amber);background:var(--amber-b);color:var(--amber);font-size:11px;cursor:pointer">&#x2715; ' + PERF_DATE + '</button>' : '<span style="font-size:11px;color:var(--muted)">' + dateLabel + '</span>')
+    + '<input type="date" max="' + todayPHT + '" value="' + (PERF_DATE || todayPHT) + '" onchange="setPerfDate(this.value)" style="padding:3px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--surface);color:var(--text);cursor:pointer">'
+    + '</div>'
     + '</div>';
 
   // ── Aggregate by filter ───────────────────────────────────────────────────
@@ -8228,7 +8271,7 @@ function buildPerformance() {
     var rec = ashifts.find(function(s){ return String(s.driver_id) === String(d.id) || String(s.rider_id) === String(d.id); });
     if (!rec) return '\u2014';
     if (rec.shift_code) return String(rec.shift_code).includes('AM') ? 'AM' : 'PM';
-    if (rec.actual_start) return new Date(rec.actual_start).getHours() < 13 ? 'AM' : 'PM';
+    if (rec.actual_start) return _phtHour(rec.actual_start) < 13 ? 'AM' : 'PM';
     return '\u2014';
   }
 
@@ -8265,11 +8308,12 @@ function buildPerformance() {
     return '<th onclick="setPerfDriverSort(\'' + col + '\')" style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:' + (active ? 'var(--accent)' : 'var(--muted)') + ';cursor:pointer;white-space:nowrap;user-select:none">' + label + arrow + '</th>';
   }
 
-  // Driver table — skeleton if no fleet data
+  // Driver table — skeleton if loading or no fleet data
   var driverContent;
-  if (fleet.length === 0) {
+  if (PERF_DATE_LOADING || fleet.length === 0) {
+    var loadMsg = PERF_DATE_LOADING ? 'Loading data for ' + PERF_DATE + '\u2026' : 'Waiting for driver data\u2026';
     driverContent = '<div style="padding-bottom:8px">'
-      + '<div style="padding:10px 14px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">Waiting for driver data\u2026</div>'
+      + '<div style="padding:10px 14px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">' + loadMsg + '</div>'
       + Array(8).fill(0).map(function() {
           return '<div style="display:flex;gap:8px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--border)">'
             + '<div class="skel" style="width:110px;height:11px"></div>'
@@ -8413,7 +8457,7 @@ function _buildShiftSummary(taxiDrivers, revTarget, shiftHrs) {
     var rec = ashifts.find(function(s){ return String(s.driver_id) === String(d.id) || String(s.rider_id) === String(d.id); });
     if (!rec) return null;
     if (rec.shift_code) return String(rec.shift_code).includes('AM') ? 'AM' : 'PM';
-    if (rec.actual_start) return new Date(rec.actual_start).getHours() < 13 ? 'AM' : 'PM';
+    if (rec.actual_start) return _phtHour(rec.actual_start) < 13 ? 'AM' : 'PM';
     return null;
   }
 
