@@ -4307,7 +4307,7 @@ const _exp = {
   ackBrief, showCheckinForm, saveCheckin, showIncidentForm, saveIncident, resolveIncident, renderFleetMgmtTab, showSwapMember,
   updateSwapTargetDrivers, executeSwap, showAddToPod, addMemberToPod, removePodMember,
   buildPerformance, setPerfTab, showPerfConfig, savePerfConfig,
-  setPerfSvc, togglePerfEcon, togglePerfAll, setPerfDetailTab, setPerfDriverSort,
+  setPerfSvc, togglePerfEcon, togglePerfAll, setPerfDetailTab, setPerfDriverSort, setPerfTableSvc,
   _renderPerfCfgTab, _perfCfgFlushTab,
 };;;;;;
 try { Object.assign(window, _exp); } catch(e) { document.body.innerHTML = '<div style="padding:20px;background:#FEF2F2;color:#991B1B;font-family:monospace">Boot error: ' + e.message + '</div>'; }
@@ -7892,6 +7892,7 @@ var PERF_SHOW_ALL     = false;
 var PERF_SVC_FILTER   = 'all';
 var PERF_DETAIL_TAB   = 'drivers';
 var PERF_DRIVER_SORT  = { col: 'proj', dir: -1 };
+var PERF_TABLE_SVC    = 'all';  // driver table service filter — independent of hero filter bar
 
 function _perfCfg(k, def) {
   return (PERF_CONFIG[k] !== undefined && PERF_CONFIG[k] !== '') ? Number(PERF_CONFIG[k]) : def;
@@ -7910,6 +7911,7 @@ function setPerfDriverSort(col) {
   }
   buildPerformance();
 }
+function setPerfTableSvc(s) { PERF_TABLE_SVC = s; buildPerformance(); }
 
 // ── Config modal ──────────────────────────────────────────────────────────────
 var _perfCfgTab   = 'taxi';
@@ -8216,7 +8218,7 @@ function buildPerformance() {
 
   // ── Section 2: Driver Performance Feed ───────────────────────────────────
   var taxiFleet   = fleet.filter(function(d){ return d.vtid === '16'; });
-  var filtFleet   = PERF_SVC_FILTER === 'all' ? fleet : fleet.filter(function(d){ return d.vtid === PERF_SVC_FILTER; });
+  var filtFleet   = PERF_TABLE_SVC === 'all' ? fleet : fleet.filter(function(d){ return d.vtid === PERF_TABLE_SVC; });
   // Build enriched driver rows for sort + render
   var _svcMap = {};
   _PERF_SVCS.forEach(function(s){ _svcMap[s.vtid] = s; });
@@ -8370,19 +8372,31 @@ function buildPerformance() {
     var _sortLabels = { name:'Driver', svc:'Service', shift:'Shift', trips:'Trips', pace:'Pace/hr', proj:'Projected', status:'Status' };
     var _sortLabel = _sortLabels[PERF_DRIVER_SORT.col] || 'Projected';
     var _sortArrow = PERF_DRIVER_SORT.dir === -1 ? '\u2193' : '\u2191';
-    var _filterChip = PERF_SVC_FILTER === 'all' ? 'All Services'
-      : ((_PERF_SVCS.find(function(s){ return s.vtid === PERF_SVC_FILTER; }) || {}).icon || '') + '\u00a0'
-        + ((_PERF_SVCS.find(function(s){ return s.vtid === PERF_SVC_FILTER; }) || {}).name || PERF_SVC_FILTER);
-    tabContent = '<div style="padding:7px 14px;font-size:11px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+    // Inline service filter pills (independent of hero filter bar)
+    var _tblSvcPills = '<div style="display:flex;gap:5px;padding:8px 14px;border-bottom:1px solid var(--border);background:var(--card);flex-wrap:wrap;align-items:center">'
+      + '<span style="font-size:11px;color:var(--muted);margin-right:2px">Filter:</span>'
+      + [{ vtid:'all', name:'All', icon:'' }].concat(_PERF_SVCS).map(function(s) {
+          var on = PERF_TABLE_SVC === s.vtid;
+          var hasTripData = s.vtid === 'all' || Number((svc[s.vtid] || {}).trips || 0) > 0;
+          if (!hasTripData) return '';
+          return '<button onclick="setPerfTableSvc(\'' + s.vtid + '\')" style="padding:3px 10px;border-radius:12px;border:1px solid '
+            + (on ? 'var(--accent)' : 'var(--border)') + ';background:' + (on ? 'var(--accent)' : 'transparent')
+            + ';color:' + (on ? '#fff' : 'var(--ink2)') + ';font-size:11px;font-weight:' + (on ? '600' : '400') + ';cursor:pointer;white-space:nowrap">'
+            + (s.icon ? s.icon + '\u00a0' : '') + s.name + '</button>';
+        }).join('')
       + (fleet.length > 0
-        ? '<span style="color:var(--text);font-weight:500">' + activeFleet.length + ' active</span>'
-          + '<span style="color:var(--muted)">\u00b7</span>'
-          + '<span style="background:var(--border);color:var(--text);border-radius:10px;padding:1px 8px;font-size:11px">' + _filterChip + '</span>'
-          + '<span style="color:var(--muted)">\u00b7</span>'
-          + '<span style="color:var(--accent);font-weight:500">Sorted: ' + _sortLabel + ' ' + _sortArrow + '</span>'
-          + '<span style="color:var(--muted);margin-left:auto">' + _buildShiftSummaryInline(taxiFleet) + '</span>'
-        : '<span style="color:var(--muted)">Waiting for driver data\u2026</span>')
-      + '</div>'
+          ? '<span style="margin-left:auto;font-size:11px;color:var(--accent);font-weight:500">' + _sortLabel + ' ' + _sortArrow + '</span>'
+            + '<span style="font-size:11px;color:var(--muted);margin-left:8px">' + activeFleet.length + ' drivers</span>'
+          : '')
+      + '</div>';
+    tabContent = _tblSvcPills
+      + (fleet.length === 0
+        ? '<div style="padding:10px 14px;font-size:11px;color:var(--muted)">Waiting for driver data\u2026</div>'
+        : (activeFleet.length === 0 ? '<div style="padding:20px;text-align:center;font-size:13px;color:var(--muted)">No active drivers for this service</div>' : ''))
+      + (fleet.length > 0 && activeFleet.length > 0
+          ? '<div style="padding:6px 14px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);background:var(--surface)">'
+            + _buildShiftSummaryInline(taxiFleet) + '</div>'
+          : '')
       + driverContent;
   }
 
