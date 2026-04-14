@@ -7911,20 +7911,38 @@ function _pcfgInput(label, key, val, oninput) {
 }
 
 function _perfCfgUpdateTotal() {
-  var tq  = Number(document.getElementById('pcfg-taxi_qty')         && document.getElementById('pcfg-taxi_qty').value         || 0);
-  var tr  = Number(document.getElementById('pcfg-taxi_rev_per_shift')&& document.getElementById('pcfg-taxi_rev_per_shift').value|| 0);
-  var mq  = Number(document.getElementById('pcfg-moto_qty')         && document.getElementById('pcfg-moto_qty').value         || 0);
-  var mr  = Number(document.getElementById('pcfg-moto_rev_per_shift')&& document.getElementById('pcfg-moto_rev_per_shift').value|| 0);
-  var taxiFleet = tq * tr;
+  function v(id) { var e = document.getElementById(id); return e ? Number(e.value) || 0 : 0; }
+  var amQty = v('pcfg-taxi_am_qty');
+  var pmQty = v('pcfg-taxi_pm_qty');
+  var tr    = v('pcfg-taxi_rev_per_shift');
+  var mq    = v('pcfg-moto_qty');
+  var mr    = v('pcfg-moto_rev_per_shift');
+  var amFleet   = amQty * tr;
+  var pmFleet   = pmQty * tr;
   var motoFleet = mq * mr;
-  var total     = taxiFleet + motoFleet;
+  var total     = amFleet + pmFleet + motoFleet;
   var el = document.getElementById('pcfg-fleet-total');
-  if (el) el.innerHTML = '= <strong>₱'+taxiFleet.toLocaleString()+'</strong> taxi &nbsp;+&nbsp; <strong>₱'+motoFleet.toLocaleString()+'</strong> moto &nbsp;= &nbsp;<strong style="color:var(--accent)">₱'+total.toLocaleString()+'</strong> salaried fleet target/day';
+  if (el) el.innerHTML =
+    'AM: <strong>'+amQty+'</strong> × ₱'+tr.toLocaleString()+' = <strong>₱'+amFleet.toLocaleString()+'</strong>'
+    + ' &nbsp;·&nbsp; PM: <strong>'+pmQty+'</strong> × ₱'+tr.toLocaleString()+' = <strong>₱'+pmFleet.toLocaleString()+'</strong>'
+    + ' &nbsp;·&nbsp; Moto: <strong>₱'+motoFleet.toLocaleString()+'</strong>'
+    + '<br>Combined salaried fleet target = <strong style="color:var(--accent)">₱'+total.toLocaleString()+'/day</strong>';
+
+  // BEP: ₱1,432 driver cost ÷ avg fare from DB
+  var taxiDrivers = (window.DB_FLEET_HEALTH||[]).filter(function(d){ return String(d.vtid)==='16' && d.avg_fare > 0; });
+  var avgFare = taxiDrivers.length > 0
+    ? Math.round(taxiDrivers.reduce(function(s,d){ return s+d.avg_fare; },0) / taxiDrivers.length)
+    : (Number(((window.DB_TODAY)||{}).avg_fare) || 0);
+  var SHIFT_COST = 1432;
+  var bep = avgFare > 0 ? Math.ceil(SHIFT_COST / avgFare) : '—';
+  var bepEl = document.getElementById('pcfg-bep-display');
+  if (bepEl) bepEl.innerHTML = '₱'+SHIFT_COST+' cost ÷ ₱'+(avgFare||'?')+' avg fare = <strong>'+bep+' trips</strong>';
 }
 
 function showPerfConfig() {
   var c = PERF_CONFIG;
-  var taxiQty    = c.taxi_qty            !== undefined ? c.taxi_qty            : '';
+  var taxiAmQty  = c.taxi_am_qty         !== undefined ? c.taxi_am_qty         : '';
+  var taxiPmQty  = c.taxi_pm_qty         !== undefined ? c.taxi_pm_qty         : '';
   var motoQty    = c.moto_qty            !== undefined ? c.moto_qty            : '';
   var taxiRev    = c.taxi_rev_per_shift  !== undefined ? c.taxi_rev_per_shift  : 2600;
   var taxiHrs    = c.taxi_shift_hrs      !== undefined ? c.taxi_shift_hrs      : 9;
@@ -7932,7 +7950,6 @@ function showPerfConfig() {
   var motoHrs    = c.moto_shift_hrs      !== undefined ? c.moto_shift_hrs      : 9;
   var gocarTrips = c.gocar_trips_target  !== undefined ? c.gocar_trips_target  : 20;
   var gosuvTrips = c.gosuv_trips_target  !== undefined ? c.gosuv_trips_target  : 10;
-  var bep        = c.bep_trips           !== undefined ? c.bep_trips           : 8;
   var commPct    = c.commission_pct_target!==undefined ? c.commission_pct_target: 20;
   var utilPct    = c.util_target         !== undefined ? c.util_target         : 70;
 
@@ -7941,14 +7958,18 @@ function showPerfConfig() {
   var sh  = 'font-size:11px;font-weight:600;color:var(--text);grid-column:1/-1;margin-top:4px;margin-bottom:2px';
 
   var body = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">'
-    + '<div style="'+sh+'">Salaried Fleet</div>'
-    + _pcfgInput('Taxi — Qty on Fleet', 'taxi_qty', taxiQty, upd)
+    + '<div style="'+sh+'">Taxi — Salaried (per shift)</div>'
+    + _pcfgInput('AM Shift Drivers', 'taxi_am_qty', taxiAmQty, upd)
+    + _pcfgInput('PM Shift Drivers', 'taxi_pm_qty', taxiPmQty, upd)
     + _pcfgInput('Rev Target / Shift (₱)', 'taxi_rev_per_shift', taxiRev, upd)
-    + _pcfgInput('Shift Hours', 'taxi_shift_hrs', taxiHrs, '')
+    + '<div style="grid-column:1/-1;font-size:11px;line-height:1.5;padding:6px 8px;background:var(--surface);border-radius:6px;border:1px solid var(--border)" id="pcfg-fleet-total">—</div>'
+    + '<div style="grid-column:span 2"></div>'
+    + _pcfgInput('Shift Hours (Taxi)', 'taxi_shift_hrs', taxiHrs, '')
+    + sep
+    + '<div style="'+sh+'">Moto Taxi — Salaried</div>'
     + _pcfgInput('Moto Taxi — Qty on Fleet', 'moto_qty', motoQty, upd)
     + _pcfgInput('Rev Target / Shift (₱)', 'moto_rev_per_shift', motoRev, upd)
     + _pcfgInput('Shift Hours', 'moto_shift_hrs', motoHrs, '')
-    + '<div style="grid-column:1/-1;font-size:12px;padding:6px 8px;background:var(--surface);border-radius:6px;border:1px solid var(--border)" id="pcfg-fleet-total">—</div>'
     + sep
     + '<div style="'+sh+'">Rideshare Targets</div>'
     + _pcfgInput('Go Car Trips/Day Target', 'gocar_trips_target', gocarTrips, '')
@@ -7956,7 +7977,8 @@ function showPerfConfig() {
     + '<div></div>'
     + sep
     + '<div style="'+sh+'">Operations</div>'
-    + _pcfgInput('BEP Trips/Shift (Taxi)', 'bep_trips', bep, '')
+    + '<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">BEP Trips/Shift (auto-computed)</label>'
+    + '<div id="pcfg-bep-display" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--muted)">—</div></div>'
     + _pcfgInput('Commission Target (%)', 'commission_pct_target', commPct, '')
     + _pcfgInput('Utilization Target (%)', 'util_target', utilPct, '')
     + '</div>';
@@ -7969,11 +7991,17 @@ function showPerfConfig() {
 }
 
 function savePerfConfig() {
-  ['taxi_qty','moto_qty','taxi_rev_per_shift','taxi_shift_hrs','moto_rev_per_shift','moto_shift_hrs',
-   'gocar_trips_target','gosuv_trips_target','bep_trips','commission_pct_target','util_target'].forEach(function(k){
+  ['taxi_am_qty','taxi_pm_qty','moto_qty','taxi_rev_per_shift','taxi_shift_hrs','moto_rev_per_shift','moto_shift_hrs',
+   'gocar_trips_target','gosuv_trips_target','commission_pct_target','util_target'].forEach(function(k){
     var el = document.getElementById('pcfg-' + k);
     if (el) PERF_CONFIG[k] = el.value;
   });
+  // Auto-compute and persist BEP
+  var taxiDrivers = (window.DB_FLEET_HEALTH||[]).filter(function(d){ return String(d.vtid)==='16' && d.avg_fare > 0; });
+  var avgFare = taxiDrivers.length > 0
+    ? Math.round(taxiDrivers.reduce(function(s,d){ return s+d.avg_fare; },0) / taxiDrivers.length)
+    : (Number(((window.DB_TODAY)||{}).avg_fare) || 0);
+  PERF_CONFIG.bep_trips = avgFare > 0 ? Math.ceil(1432 / avgFare) : (PERF_CONFIG.bep_trips || 8);
   try { lsSet('PERF_CONFIG', JSON.stringify(PERF_CONFIG)); } catch(e){}
   closeModal();
   buildPerformance();
@@ -8023,18 +8051,20 @@ function _rag(val, lo, hi) {
 // ── Strategy Tab ─────────────────────────────────────────────────────────────
 function _perfStrategy() {
   var taxiTarget  = _perfCfg('taxi_rev_per_shift', 2600);
-  var taxiQty     = _perfCfg('taxi_qty', 0);
+  var taxiAmQty   = _perfCfg('taxi_am_qty', 0);
+  var taxiPmQty   = _perfCfg('taxi_pm_qty', 0);
   var motoTarget  = _perfCfg('moto_rev_per_shift', 1200);
   var motoQty     = _perfCfg('moto_qty', 0);
   var shiftHrs    = _perfCfg('taxi_shift_hrs', 9);
   var motoHrs     = _perfCfg('moto_shift_hrs', 9);
-  var bepTrips    = _perfCfg('bep_trips', 8);
   var gocarTgt    = _perfCfg('gocar_trips_target', 20);
   var gosuvTgt    = _perfCfg('gosuv_trips_target', 10);
 
-  // Salaried fleet targets (qty-driven)
-  var fleetTaxiTgt = taxiQty * taxiTarget;
-  var fleetMotoTgt = motoQty * motoTarget;
+  // Salaried fleet targets (AM + PM shifts × per-shift target)
+  var fleetTaxiAmTgt = taxiAmQty * taxiTarget;
+  var fleetTaxiPmTgt = taxiPmQty * taxiTarget;
+  var fleetTaxiTgt   = fleetTaxiAmTgt + fleetTaxiPmTgt;
+  var fleetMotoTgt   = motoQty * motoTarget;
   var fleetSalTgt  = fleetTaxiTgt + fleetMotoTgt;
 
   // Actuals from DB
@@ -8072,7 +8102,9 @@ function _perfStrategy() {
     return (d.rev_today / d.shift_hrs_today) * shiftHrs < taxiTarget * 0.5;
   }).length;
 
-  // BEP analysis
+  // BEP: auto-computed from avg fare (₱1,432 shift cost ÷ avg fare)
+  var SHIFT_COST  = 1432;
+  var bepTrips    = avgFare > 0 ? Math.ceil(SHIFT_COST / avgFare) : (_perfCfg('bep_trips', 8));
   var bepRevFleet = bepTrips * avgFare * taxiActive;
   var bepVarPct   = bepRevFleet > 0 ? Math.round((totalTaxiRev - bepRevFleet) / bepRevFleet * 100) : 0;
 
@@ -8091,23 +8123,42 @@ function _perfStrategy() {
     + _pKPI('Taxi On-Track', onTrack+'/'+taxiActive, atRisk+' at-risk · '+critical+' critical', onTrack>=taxiActive*0.7?'#22C55E':'#EF4444')
     + '</div>';
 
-  // Salaried fleet target summary
+  // Salaried fleet target summary — AM + PM breakdown
   var salBlock = '<div style="padding:0 20px 20px">'
     + '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px">'
     + '<div style="font-size:12px;font-weight:600;margin-bottom:12px;color:var(--text)">Salaried Fleet Target vs Actual</div>'
-    + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px">'
-    + '<div><div style="font-size:11px;color:var(--muted)">Taxi Target/Shift</div><div style="font-size:17px;font-weight:700">₱'+taxiTarget.toLocaleString()+'</div><div style="font-size:11px;color:var(--muted)">×'+taxiQty+' = ₱'+fleetTaxiTgt.toLocaleString()+'/day</div></div>'
-    + '<div><div style="font-size:11px;color:var(--muted)">Moto Target/Shift</div><div style="font-size:17px;font-weight:700">₱'+motoTarget.toLocaleString()+'</div><div style="font-size:11px;color:var(--muted)">×'+motoQty+' = ₱'+fleetMotoTgt.toLocaleString()+'/day</div></div>'
-    + '<div><div style="font-size:11px;color:var(--muted)">Combined Salaried Target</div><div style="font-size:17px;font-weight:700">₱'+fleetSalTgt.toLocaleString()+'</div></div>'
-    + '<div><div style="font-size:11px;color:var(--muted)">Actual Salaried Rev</div><div style="font-size:17px;font-weight:700">₱'+(totalTaxiRev+totalMotoRev).toLocaleString()+'</div>'
-    + '<div style="font-size:11px">'+varStr(totalTaxiRev+totalMotoRev, fleetSalTgt)+'</div></div>'
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:12px">'
+    + '<div style="background:var(--surface);border-radius:6px;padding:10px 12px">'
+    +   '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Taxi AM ('+taxiAmQty+' drivers)</div>'
+    +   '<div style="font-size:16px;font-weight:700">₱'+fleetTaxiAmTgt.toLocaleString()+'</div>'
+    +   '<div style="font-size:10px;color:var(--muted)">'+taxiAmQty+' × ₱'+taxiTarget.toLocaleString()+'/shift</div>'
     + '</div>'
-    + (fleetSalTgt > 0 ? _pBar(totalTaxiRev + totalMotoRev, fleetSalTgt) : '')
+    + '<div style="background:var(--surface);border-radius:6px;padding:10px 12px">'
+    +   '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Taxi PM ('+taxiPmQty+' drivers)</div>'
+    +   '<div style="font-size:16px;font-weight:700">₱'+fleetTaxiPmTgt.toLocaleString()+'</div>'
+    +   '<div style="font-size:10px;color:var(--muted)">'+taxiPmQty+' × ₱'+taxiTarget.toLocaleString()+'/shift</div>'
+    + '</div>'
+    + '<div style="background:var(--surface);border-radius:6px;padding:10px 12px">'
+    +   '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Moto Taxi ('+motoQty+' drivers)</div>'
+    +   '<div style="font-size:16px;font-weight:700">₱'+fleetMotoTgt.toLocaleString()+'</div>'
+    +   '<div style="font-size:10px;color:var(--muted)">'+motoQty+' × ₱'+motoTarget.toLocaleString()+'/shift</div>'
+    + '</div>'
+    + '<div style="background:var(--surface);border-radius:6px;padding:10px 12px">'
+    +   '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Combined Daily Target</div>'
+    +   '<div style="font-size:16px;font-weight:700">₱'+fleetSalTgt.toLocaleString()+'</div>'
+    +   '<div style="font-size:11px;margin-top:2px">'+varStr(totalTaxiRev+totalMotoRev, fleetSalTgt)+'</div>'
+    + '</div>'
+    + '</div>'
+    + (fleetSalTgt > 0 ? _pBar(totalTaxiRev + totalMotoRev, fleetSalTgt) : '<div style="font-size:11px;color:var(--muted)">Set driver quantities in ⚙ Targets to see fleet target bar</div>')
     + '</div></div>';
 
+  var bepFormula = avgFare > 0
+    ? '₱'+SHIFT_COST+' cost ÷ ₱'+avgFare+' avg fare = <strong>'+bepTrips+' trips</strong>'
+    : 'No avg fare data yet — defaulting to '+bepTrips+' trips';
   var bepBlock = '<div style="padding:0 20px 20px">'
     + '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px">'
-    + '<div style="font-size:12px;font-weight:600;margin-bottom:12px;color:var(--text)">Break-Even Analysis · Taxi</div>'
+    + '<div style="font-size:12px;font-weight:600;margin-bottom:4px;color:var(--text)">Break-Even Analysis · Taxi</div>'
+    + '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">'+bepFormula+'</div>'
     + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px">'
     + '<div><div style="font-size:11px;color:var(--muted)">BEP Trips/Shift</div><div style="font-size:17px;font-weight:700">'+bepTrips+'</div></div>'
     + '<div><div style="font-size:11px;color:var(--muted)">Actual Avg Trips/Driver</div><div style="font-size:17px;font-weight:700">'+(taxiActive>0?Math.round(totalTrips/taxiActive):0)+'</div></div>'
@@ -8284,7 +8335,7 @@ function _perfCompany() {
   var shiftHrs    = _perfCfg('taxi_shift_hrs', 9);
   var utilTarget  = _perfCfg('util_target', 70);
   var commTarget  = _perfCfg('commission_pct_target', 20);
-  var taxiQty     = _perfCfg('taxi_qty', 0);
+  var taxiQty     = _perfCfg('taxi_am_qty', 0) + _perfCfg('taxi_pm_qty', 0);
   var motoQty     = _perfCfg('moto_qty', 0);
   var taxiRevTgt  = _perfCfg('taxi_rev_per_shift', 2600);
   var motoRevTgt  = _perfCfg('moto_rev_per_shift', 1200);
