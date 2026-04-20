@@ -2098,8 +2098,108 @@ function showDriverPerf(mode) {
 }
 
 // ─── COMMAND CENTER PANELS — implemented in Tasks 7–11 ──────────────────────
-function cmdFleetPanel()    { return '<div style="padding:24px;color:var(--muted);font-size:12px">Fleet panel loading...</div>'; }
-function cmdSegmentsPanel() { return '<div style="padding:24px;color:var(--muted);font-size:12px">Segments panel loading...</div>'; }
+function cmdFleetPanel() {
+  var activeShifts = ASHIFTS.filter(function(s){ return s.date === DATA_DATE && s.status === 'active'; });
+  var atRiskThreshold = _perfCfg ? _perfCfg('taxi_at_risk_min', 1600) : 1600;
+
+  // Compute fleet status from ASSETS and live shift data
+  var activeCount = activeShifts.length;
+  var atRiskAssets = ASSETS.filter(function(a) {
+    var revToday = assetRevToday2 ? assetRevToday2(a.asset_id) : (a.rev_today || 0);
+    var tripsToday = a.trips_today || 0;
+    var isOnShift = activeShifts.find(function(s){ return String(s.vehicle_id) === String(a.vehicle_id); });
+    return isOnShift && revToday < atRiskThreshold && tripsToday > 0;
+  });
+  var noShiftCount = ASSETS.length - activeCount;
+  var atRiskCount = atRiskAssets.length;
+
+  var atRiskRows = atRiskAssets.slice(0, 8).map(function(a) {
+    var revToday = assetRevToday2 ? assetRevToday2(a.asset_id) : (a.rev_today || 0);
+    var revFmt = '\u20b1' + revToday.toLocaleString();
+    var typeLabel = 'Taxi';
+    var revPct = a.target > 0 ? Math.round(revToday / a.target * 100) : 0;
+    var statusCol = revToday < 1600 ? '#dc2626' : '#92400e';
+    return '<tr>'
+      + '<td><span class="plate">' + (a.plate || '—') + '</span></td>'
+      + '<td><span class="badge" style="background:#eff6ff;color:#1d4ed8">' + typeLabel + '</span></td>'
+      + '<td><span style="font-size:10px;font-weight:600;color:' + statusCol + '">'
+      +   (revToday < 1600 ? 'Critical' : 'At Risk') + '</span></td>'
+      + '<td><span class="rev">' + revFmt + '</span></td>'
+      + '<td><div class="pb"><div class="pf" style="width:' + Math.min(revPct,100) + '%;background:'
+      +   (revPct >= 80 ? '#34d399' : revPct >= 55 ? '#fbbf24' : '#f87171') + '"></div></div></td>'
+      + '</tr>';
+  }).join('');
+
+  var moreCount = ASSETS.length;
+  return '<div class="fleet-rag-row">'
+    + '<div class="rag-tile active"><div class="rag-num">' + activeCount + '</div><div class="rag-sub">active · ' + ASSETS.length + ' total</div><div class="rag-trend fl">\u2192 fleet status</div></div>'
+    + '<div class="rag-tile risk"><div class="rag-num">' + atRiskCount + '</div><div class="rag-sub">at risk or critical</div><div class="rag-trend ' + (atRiskCount > 3 ? 'dn' : 'fl') + '">' + (atRiskCount > 3 ? '\u2191 above threshold' : '\u2192 within normal') + '</div></div>'
+    + '<div class="rag-tile offline"><div class="rag-num">' + noShiftCount + '</div><div class="rag-sub">no shift today</div><div class="rag-trend fl">\u2192 scheduled rest</div></div>'
+    + '</div>'
+    + '<div class="attn-header"><span class="attn-lbl">Needs attention now</span>'
+    + '<button class="view-all-link" onclick="goS(\'assets\')">\u2192 View all ' + moreCount + ' in Vehicles</button></div>'
+    + (atRiskRows.length > 0
+      ? '<table style="flex:1"><thead><tr><th>Plate</th><th>Type</th><th>Status</th><th>Rev Today</th><th style="min-width:80px">Progress</th></tr></thead><tbody>' + atRiskRows + '</tbody></table>'
+      + '<div class="tbl-footer">Showing at-risk vehicles only \u00b7 <span style="color:#16a34a">\u2713 ' + (activeCount - atRiskCount) + ' running normally</span></div>'
+      : '<div style="padding:24px;text-align:center;font-size:12px;color:#94a3b8">\u2713 No vehicles need immediate attention</div>');
+}
+function cmdSegmentsPanel() {
+  var drivers = (D4W || []).slice().sort(function(a,b){ return (b.rpd||0) - (a.rpd||0); });
+  var champion = drivers.filter(function(d){ return (d.rpd||0) >= 3000; });
+  var onTrack  = drivers.filter(function(d){ return (d.rpd||0) >= 2001 && (d.rpd||0) < 3000; });
+  var atRisk   = drivers.filter(function(d){ return (d.rpd||0) >= 1600 && (d.rpd||0) < 2001; });
+  var critical = drivers.filter(function(d){ return (d.rpd||0) > 0    && (d.rpd||0) < 1600; });
+
+  function tierBadge(rpd) {
+    if (rpd >= 3000) return '<span class="tier-badge t-ch">Champion</span>';
+    if (rpd >= 2001) return '<span class="tier-badge t-tr">On Track</span>';
+    if (rpd >= 1600) return '<span class="tier-badge t-ri">At Risk</span>';
+    if (rpd > 0)     return '<span class="tier-badge t-cr">Critical</span>';
+    return '<span class="tier-badge" style="background:#f1f5f9;color:#64748b">Inactive</span>';
+  }
+
+  function shiftBadge(d) {
+    var dShift = ASHIFTS.find(function(s){ return String(s.driver_id) === String(d.id) && s.date === DATA_DATE && s.status === 'active'; });
+    if (!dShift) return '';
+    var type = dShift.shift_type || '';
+    return '<span class="sb' + (type==='PM'?' pm':'') + '">' + (type || '—') + '</span>';
+  }
+
+  var tgtRpd = typeof _perfCfg === 'function' ? _perfCfg('taxi_rev_per_shift', 2600) : 2600;
+
+  var rows = drivers.slice(0, 30).map(function(d) {
+    var rpd = d.rpd || 0;
+    var pct = tgtRpd > 0 ? Math.round(rpd / tgtRpd * 100) : 0;
+    var barCol = rpd >= 3000 ? '#34d399' : rpd >= 2001 ? '#60a5fa' : rpd >= 1600 ? '#fbbf24' : '#f87171';
+    return '<tr>'
+      + '<td style="font-weight:600;font-size:11px">' + (d.name || '—') + '</td>'
+      + '<td>' + tierBadge(rpd) + '</td>'
+      + '<td><span class="rev">\u20b1' + rpd.toLocaleString() + '</span></td>'
+      + '<td style="min-width:80px"><div class="pb"><div class="pf" style="width:' + Math.min(pct,100) + '%;background:' + barCol + '"></div></div></td>'
+      + '<td style="font-size:11px;color:#64748b">' + (d.trips_today || 0) + '</td>'
+      + '<td>' + shiftBadge(d) + '</td>'
+      + '</tr>';
+  }).join('');
+
+  var more = drivers.length > 30 ? '<div class="tbl-footer">Showing 30 of ' + drivers.length + ' drivers · <button class="view-all-link" onclick="goS(\'fleet\')">View all in Fleet &amp; Drivers \u2192</button></div>' : '';
+
+  return '<div class="seg-grid">'
+    + '<div class="seg ch"><div class="seg-val">' + champion.length + '</div><div class="seg-lbl">Champion</div><div class="seg-thresh">\u2265 \u20b13,000 / day</div></div>'
+    + '<div class="seg tr"><div class="seg-val">' + onTrack.length  + '</div><div class="seg-lbl">On Track</div><div class="seg-thresh">\u20b12,001 \u2013 2,999</div></div>'
+    + '<div class="seg ri"><div class="seg-val">' + atRisk.length   + '</div><div class="seg-lbl">At Risk</div><div class="seg-thresh">\u20b11,600 \u2013 2,000</div></div>'
+    + '<div class="seg cr"><div class="seg-val">' + critical.length + '</div><div class="seg-lbl">Critical</div><div class="seg-thresh">< \u20b11,600</div></div>'
+    + '</div>'
+    + (rows.length > 0
+      ? '<table style="flex:1"><thead><tr><th>Driver</th><th>Tier</th><th>RPD</th><th style="min-width:80px">Progress</th><th>Trips</th><th>Shift</th></tr></thead><tbody>' + rows + '</tbody></table>'
+      : '<div style="padding:24px;text-align:center;font-size:12px;color:#94a3b8">No taxi driver data yet</div>')
+    + more
+    + '<div class="tbl-footer">'
+    + '<span style="color:#16a34a">' + champion.length + ' Champion</span>'
+    + ' \u00b7 <span style="color:#1d4ed8">' + onTrack.length + ' On Track</span>'
+    + ' \u00b7 <span style="color:#92400e">' + atRisk.length + ' At Risk</span>'
+    + ' \u00b7 <span style="color:#dc2626">' + critical.length + ' Critical</span>'
+    + '</div>';
+}
 function cmdDemandPanel()   { return '<div style="padding:24px;color:var(--muted);font-size:12px">Demand panel loading...</div>'; }
 function cmdHeatmapPanel()  { return '<div style="padding:24px;color:var(--muted);font-size:12px">Heatmap panel loading...</div>'; }
 function cmdPodsPanel()     { return '<div style="padding:24px;color:var(--muted);font-size:12px">Pods panel loading...</div>'; }
