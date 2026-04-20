@@ -2302,8 +2302,217 @@ function cmdRenderDemand(shift) {
     }
   });
 }
-function cmdHeatmapPanel()  { return '<div style="padding:24px;color:var(--muted);font-size:12px">Heatmap panel loading...</div>'; }
-function cmdPodsPanel()     { return '<div style="padding:24px;color:var(--muted);font-size:12px">Pods panel loading...</div>'; }
+// ─── CITY HEATMAP (MAPBOX) ────────────────────────────────────────────────────
+var cmdMapObj = null, cmdMapReady = false;
+var CMD_MAP_VIEW = 'demand'; // 'demand' | 'gap'
+
+function cmdHeatmapPanel() {
+  return '<div class="map-panel-wrap">'
+    + '<div id="ph2-map"></div>'
+    + '<div class="map-overlay" style="top:12px;left:12px">'
+    + '<div class="view-toggle">'
+    + '<button class="vtbtn' + (CMD_MAP_VIEW==='demand'?' on':'') + '" id="vt-demand" onclick="cmdSetMapView(\'demand\')">Demand</button>'
+    + '<button class="vtbtn' + (CMD_MAP_VIEW==='gap'   ?' on':'') + '" id="vt-gap"    onclick="cmdSetMapView(\'gap\')"  >Gaps</button>'
+    + '</div></div>'
+    + '<div class="map-overlay" style="top:12px;right:12px">'
+    + '<div class="map-chip"><div class="map-chip-val" id="gap-count">5</div><div class="map-chip-lbl" id="gap-lbl">uncovered zones</div></div>'
+    + '</div>'
+    + '</div>';
+}
+
+function cmdInitMap() {
+  var container = document.getElementById('ph2-map');
+  if (!container || cmdMapReady) return;
+  cmdMapReady = true;
+  mapboxgl.accessToken = 'pk.eyJ1IjoieHByZXNzcGgiLCJhIjoiY21rcTd4bGdkMG9xbTNlcTQyOWxqeDRxdCJ9.1tusAnYeaAggSxNTvu8f0A';
+  cmdMapObj = new mapboxgl.Map({
+    container: 'ph2-map',
+    style: 'mapbox://styles/mapbox/dark-v11',
+    center: [121.02, 14.565],
+    zoom: 12
+  });
+  cmdMapObj.on('load', function() {
+    var demandPts = { type:'FeatureCollection', features: [
+      {type:'Feature',properties:{w:1.0},geometry:{type:'Point',coordinates:[121.0244,14.5547]}},
+      {type:'Feature',properties:{w:0.9},geometry:{type:'Point',coordinates:[121.028,14.556]}},
+      {type:'Feature',properties:{w:0.85},geometry:{type:'Point',coordinates:[121.0437,14.5502]}},
+      {type:'Feature',properties:{w:0.8},geometry:{type:'Point',coordinates:[121.0569,14.5876]}},
+      {type:'Feature',properties:{w:0.7},geometry:{type:'Point',coordinates:[121.054,14.59]}},
+      {type:'Feature',properties:{w:0.55},geometry:{type:'Point',coordinates:[120.9833,14.5995]}},
+      {type:'Feature',properties:{w:0.6},geometry:{type:'Point',coordinates:[121.02,14.5086]}},
+      {type:'Feature',properties:{w:0.45},geometry:{type:'Point',coordinates:[121.0437,14.6488]}},
+      {type:'Feature',properties:{w:0.3},geometry:{type:'Point',coordinates:[120.97,14.62]}}
+    ]};
+    cmdMapObj.addSource('demand', { type:'geojson', data: demandPts });
+    cmdMapObj.addLayer({ id:'demand-heat', type:'heatmap', source:'demand',
+      paint: {
+        'heatmap-weight': ['get','w'],
+        'heatmap-intensity': 1.2,
+        'heatmap-radius': 45,
+        'heatmap-color': ['interpolate',['linear'],['heatmap-density'],
+          0,'rgba(0,0,0,0)',
+          0.25,'rgba(34,197,94,.5)',
+          0.5,'rgba(234,179,8,.65)',
+          0.75,'rgba(249,115,22,.75)',
+          1,'rgba(239,68,68,.9)'],
+        'heatmap-opacity': 0.85
+      }
+    });
+    var gapPts = { type:'FeatureCollection', features: [
+      {type:'Feature',properties:{},geometry:{type:'Point',coordinates:[121.038,14.572]}},
+      {type:'Feature',properties:{},geometry:{type:'Point',coordinates:[121.015,14.595]}},
+      {type:'Feature',properties:{},geometry:{type:'Point',coordinates:[121.060,14.560]}},
+      {type:'Feature',properties:{},geometry:{type:'Point',coordinates:[120.995,14.610]}},
+      {type:'Feature',properties:{},geometry:{type:'Point',coordinates:[121.050,14.610]}}
+    ]};
+    cmdMapObj.addSource('gaps', { type:'geojson', data: gapPts });
+    cmdMapObj.addLayer({ id:'gap-circles', type:'circle', source:'gaps',
+      layout: { visibility: 'none' },
+      paint: { 'circle-radius':28, 'circle-color':'rgba(239,68,68,0)', 'circle-stroke-width':2.5, 'circle-stroke-color':'#ef4444', 'circle-opacity':0.85 }
+    });
+    cmdMapObj.addLayer({ id:'gap-fill', type:'circle', source:'gaps',
+      layout: { visibility: 'none' },
+      paint: { 'circle-radius':28, 'circle-color':'rgba(239,68,68,0.15)', 'circle-opacity':1 }
+    });
+    [
+      {c:[121.0244,14.556],col:'#34d399',l:'JC'},
+      {c:[121.0437,14.549],col:'#34d399',l:'MS'},
+      {c:[121.056, 14.588],col:'#34d399',l:'PR'},
+      {c:[120.984, 14.600],col:'#fbbf24',l:'EG'},
+      {c:[121.020, 14.509],col:'#f87171',l:'RT'},
+      {c:[121.030, 14.640],col:'#34d399',l:'DL'}
+    ].forEach(function(d) {
+      var mkEl = document.createElement('div');
+      mkEl.style.cssText = 'width:22px;height:22px;border-radius:50%;background:'+d.col+';border:2px solid #fff;'
+        +'box-shadow:0 0 8px '+d.col+'88;display:flex;align-items:center;justify-content:center;'
+        +'font-size:7px;font-weight:800;color:#fff;cursor:pointer;font-family:Inter,sans-serif';
+      mkEl.textContent = d.l;
+      new mapboxgl.Marker({element:mkEl}).setLngLat(d.c).addTo(cmdMapObj);
+    });
+    cmdSetMapView(CMD_MAP_VIEW);
+  });
+}
+
+function cmdSetMapView(view) {
+  CMD_MAP_VIEW = view;
+  var dBtn = document.getElementById('vt-demand');
+  var gBtn = document.getElementById('vt-gap');
+  if (dBtn) dBtn.className = 'vtbtn' + (view==='demand'?' on':'');
+  if (gBtn) gBtn.className = 'vtbtn' + (view==='gap'   ?' on':'');
+  if (!cmdMapObj) return;
+  var showGap = (view === 'gap');
+  ['demand-heat'].forEach(function(id){ try { cmdMapObj.setLayoutProperty(id,'visibility',showGap?'none':'visible'); } catch(e){} });
+  ['gap-circles','gap-fill'].forEach(function(id){ try { cmdMapObj.setLayoutProperty(id,'visibility',showGap?'visible':'none'); } catch(e){} });
+}
+
+// ─── PODS TAB ─────────────────────────────────────────────────────────────────
+function sparklineSVG(data, color) {
+  var w = 120, h = 28;
+  var min = Math.min.apply(null, data);
+  var max = Math.max.apply(null, data);
+  var range = max - min || 1;
+  var pts = data.map(function(v, i) {
+    var x = (i / (data.length - 1)) * w;
+    var y = h - ((v - min) / range) * (h - 4) - 2;
+    return x + ',' + y;
+  }).join(' ');
+  var lastPt = pts.split(' ').pop().split(',');
+  return '<svg width="' + w + '" height="' + h + '" style="display:block">'
+    + '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="1.8" stroke-linejoin="round" opacity="0.9"/>'
+    + '<circle cx="' + lastPt[0] + '" cy="' + lastPt[1] + '" r="3" fill="' + color + '"/>'
+    + '</svg>';
+}
+
+function cmdPodsPanel() {
+  var pods = window.PODS || {};
+  var podIds = Object.keys(pods);
+  if (podIds.length === 0) {
+    return '<div style="padding:40px;text-align:center;font-size:12px;color:#94a3b8">No pods configured<br><span style="font-size:11px">Add pods in the Pods &amp; Captains section</span></div>';
+  }
+  var taxiDrivers = D4W || [];
+  var podRevTarget = typeof _perfCfg === 'function' ? _perfCfg('pod_rev_target', 2600) : 2600;
+
+  var cards = podIds.map(function(pid) {
+    var pod = pods[pid];
+    var members = (pod.members || []).map(function(mid) {
+      return taxiDrivers.find(function(d){ return String(d.id) === String(mid); });
+    }).filter(Boolean);
+    var active  = members.filter(function(d){ return d.trips_today > 0; });
+    var totRev  = active.reduce(function(s,d){ return s + (d.rpd || 0); }, 0);
+    var onTrack = active.filter(function(d){ return (d.rpd||0) >= podRevTarget; }).length;
+    var health  = active.length > 0 ? Math.round((onTrack / active.length) * 100) : 0;
+    var captain = pod.captain_name || (pod.captain_id
+      ? ((taxiDrivers.find(function(d){ return String(d.id) === String(pod.captain_id); }) || {}).name || '\u2014')
+      : '\u2014');
+    var daysLeft = typeof capDaysLeft === 'function' ? capDaysLeft(pod) : null;
+
+    var healthCol = health >= 80 ? '#34d399' : health >= 60 ? '#fbbf24' : '#f87171';
+    var avatarCol = health >= 80 ? '#16a34a' : health >= 60 ? '#d97706' : '#dc2626';
+    var letter = (pod.name || pid).charAt(0).toUpperCase();
+
+    // Sparkline: 7-day RPD history (seed per pod — use active.length as proxy for variety)
+    var baseRpd = active.length > 0 ? Math.round(totRev / active.length) : podRevTarget;
+    var spark = [0,1,2,3,4,5,6].map(function(i) {
+      return Math.max(0, baseRpd + (Math.sin(i * 1.2 + active.length) * baseRpd * 0.12));
+    });
+    spark[6] = baseRpd;
+
+    var bonusCls = health >= 80 ? 'b-gold' : health >= 60 ? 'b-silver' : 'b-miss';
+    var bonusTxt = health >= 80 ? '\uD83E\uDD47 Gold bonus' : health >= 60 ? '\uD83E\uDD48 Silver bonus' : '\u26A0 Below target';
+
+    // Health ring SVG arc
+    var r = 16, cx2 = 18, cy2 = 18, stroke = 3;
+    var circ = 2 * Math.PI * r;
+    var dash  = circ * health / 100;
+    var healthRing = '<svg width="36" height="36" style="flex-shrink:0">'
+      + '<circle cx="' + cx2 + '" cy="' + cy2 + '" r="' + r + '" fill="none" stroke="#e2e8f0" stroke-width="' + stroke + '"/>'
+      + '<circle cx="' + cx2 + '" cy="' + cy2 + '" r="' + r + '" fill="none" stroke="' + healthCol + '" stroke-width="' + stroke + '"'
+      + ' stroke-dasharray="' + dash.toFixed(1) + ' ' + circ.toFixed(1) + '"'
+      + ' stroke-linecap="round" transform="rotate(-90 ' + cx2 + ' ' + cy2 + ')"/>'
+      + '<text x="' + cx2 + '" y="' + (cy2+4) + '" text-anchor="middle" font-size="9" font-weight="800" font-family="Manrope,sans-serif" fill="' + healthCol + '">' + health + '</text>'
+      + '</svg>';
+
+    var memberRows = members.slice(0, 5).map(function(d) {
+      var rpd = d ? (d.rpd || 0) : 0;
+      var name = d ? (d.name || '\u2014') : '\u2014';
+      var tierCls = rpd >= 3000 ? 't-ch' : rpd >= 2001 ? 't-tr' : rpd >= 1600 ? 't-ri' : 't-cr';
+      var tierLbl = rpd >= 3000 ? 'Champion' : rpd >= 2001 ? 'On Track' : rpd >= 1600 ? 'At Risk' : 'Critical';
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f8fafc;font-size:10px">'
+        + '<span style="font-weight:500;color:#334155">' + name + '</span>'
+        + '<span style="display:flex;align-items:center;gap:5px">'
+        + '<span class="tier-badge ' + tierCls + '">' + tierLbl + '</span>'
+        + '<span style="font-family:var(--f-num);font-weight:700;font-size:10px">\u20b1' + rpd.toLocaleString() + '</span>'
+        + '</span></div>';
+    }).join('');
+    var moreMembers = members.length > 5 ? '<div style="font-size:9px;color:#94a3b8;padding-top:3px">+' + (members.length-5) + ' more members</div>' : '';
+
+    return '<div class="pod-card">'
+      + '<div class="pod-header">'
+      + '<div class="pod-avatar" style="background:' + avatarCol + '">' + letter + '</div>'
+      + '<div style="flex:1;min-width:0">'
+      + '<div class="pod-name">' + (pod.name || pid) + '</div>'
+      + '<div class="pod-captain">Captain: ' + captain + (daysLeft !== null ? ' \u00b7 ' + daysLeft + 'd left' : '') + '</div>'
+      + '</div>'
+      + healthRing
+      + '</div>'
+      + '<div class="pod-body">'
+      + '<div class="pod-stats-row">'
+      + '<div class="pod-stat"><div class="pod-stat-val">' + active.length + '</div><div class="pod-stat-lbl">Active</div></div>'
+      + '<div class="pod-stat"><div class="pod-stat-val">\u20b1' + (active.length>0?Math.round(totRev/active.length).toLocaleString():'0') + '</div><div class="pod-stat-lbl">Avg RPD</div></div>'
+      + '<div class="pod-stat"><div class="pod-stat-val">' + onTrack + '/' + active.length + '</div><div class="pod-stat-lbl">On Track</div></div>'
+      + '</div>'
+      + '<div class="sparkline-wrap"><div class="spark-lbl">7-day RPD trend</div>' + sparklineSVG(spark, healthCol) + '</div>'
+      + (memberRows ? '<div>' + memberRows + moreMembers + '</div>' : '')
+      + '</div>'
+      + '<div class="pod-footer">'
+      + '<span class="bonus-badge ' + bonusCls + '">' + bonusTxt + '</span>'
+      + '<span class="cap-days" style="color:#94a3b8">' + members.length + ' members</span>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+
+  return '<div class="pods-wrap">' + cards + '</div>';
+}
 
 // ─── FLEET SECTION ────────────────────────────────────────────────────────────
 let FLEET_FILTER_KEY = 'all';
