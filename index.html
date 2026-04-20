@@ -1497,8 +1497,9 @@ function calcUE(ue){
 
 function fuelLogsForAsset(assetId){return FUEL_LOG.filter(f=>f.asset_id===assetId).sort((a,b)=>b.date.localeCompare(a.date));}
 
+// Pending: fuel costs will populate once driver app → vehicle assignment API is connected
 function fuelThisMonth(assetId){
-  const now='2026-04';
+  const now = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
   return FUEL_LOG.filter(f=>f.asset_id===assetId&&f.date.startsWith(now)).reduce((a,f)=>a+f.cost,0);
 }
 
