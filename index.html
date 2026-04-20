@@ -1372,7 +1372,7 @@ function assetRevPeriod2(id,days){
 function assetAvgRph(id){
   const sh=assetShiftsFor(id).filter(s=>s.status==='completed');
   if(!sh.length)return 0;
-  return Math.round(sh.reduce((a,s)=>a+s.gross_revenue,0)/sh.reduce((a,s)=>a+9,0));
+  return Math.round(sh.reduce((a,s)=>a+s.gross_revenue,0)/sh.reduce((a,s)=>a+(s.shift_hours||9),0));
 }
 
 function assetUtilPct(id){
@@ -8597,7 +8597,8 @@ function _buildAssetLeaderboard() {
     var tripsToday = m.am_trips_today + m.pm_trips_today || 0;
     var revMtd = m.rev_mtd || 0;
     var utilHrs = m.utilized_hrs || 0;
-    var utilPct = utilHrs > 0 ? Math.round(utilHrs / 9 * 100) : 0;
+    var shiftLen = m.shift_hours || 9;
+    var utilPct  = utilHrs > 0 ? Math.round(utilHrs / shiftLen * 100) : 0;
     var vs = assetTgt > 0 ? Math.round(revToday / assetTgt * 100) : null;
     return { plate: a.plate || a.asset_id, depot: a.depot || '\u2014', revToday: revToday, tripsToday: tripsToday, revMtd: revMtd, utilPct: utilPct, vs: vs };
   }).sort(function(a, b){ return b.revToday - a.revToday; });
