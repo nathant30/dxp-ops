@@ -2199,7 +2199,107 @@ function cmdSegmentsPanel() {
     + ' \u00b7 <span style="color:#dc2626">' + critical.length + ' Critical</span>'
     + '</div>';
 }
-function cmdDemandPanel()   { return '<div style="padding:24px;color:var(--muted);font-size:12px">Demand panel loading...</div>'; }
+// ─── DEMAND CHART DATA (seed) ──────────────────────────────────────────────────
+var CMD_DEMAND_TODAY = [
+  {h:4,c:8,x:2},{h:5,c:18,x:3},{h:6,c:42,x:6},{h:7,c:68,x:9},
+  {h:8,c:71,x:8},{h:9,c:55,x:7},{h:10,c:44,x:5},{h:11,c:38,x:4},
+  {h:12,c:32,x:4},{h:13,c:30,x:3},{h:14,c:28,x:3},{h:15,c:14,x:2},
+  {h:16,c:22,x:3},{h:17,c:38,x:5},{h:18,c:52,x:7},{h:19,c:61,x:8},
+  {h:20,c:55,x:6},{h:21,c:44,x:5},{h:22,c:30,x:4},{h:23,c:18,x:2},
+  {h:0,c:10,x:1},{h:1,c:6,x:1},{h:2,c:4,x:0},{h:3,c:3,x:0}
+];
+var CMD_DEMAND_YEST = [
+  {h:4,c:6,x:1},{h:5,c:15,x:2},{h:6,c:38,x:5},{h:7,c:60,x:8},
+  {h:8,c:65,x:9},{h:9,c:52,x:8},{h:10,c:40,x:5},{h:11,c:35,x:4},
+  {h:12,c:28,x:3},{h:13,c:25,x:3},{h:14,c:22,x:2},{h:15,c:18,x:2},
+  {h:16,c:18,x:2},{h:17,c:32,x:4},{h:18,c:48,x:6},{h:19,c:55,x:7},
+  {h:20,c:50,x:5},{h:21,c:40,x:4},{h:22,c:26,x:3},{h:23,c:14,x:2},
+  {h:0,c:8,x:1},{h:1,c:5,x:0},{h:2,c:3,x:0},{h:3,c:2,x:0}
+];
+
+function cmdDemandPanel() {
+  var nowH = new Date().getHours();
+  CMD_SHIFT = nowH < 16 ? 'am' : 'pm';
+  return '<div class="demand-wrap">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'
+    + '<div class="shift-toggle">'
+    + '<button class="shift-btn' + (CMD_SHIFT==='am'?' on':'') + '" id="cmd-am-btn" onclick="cmdRenderDemand(\'am\')">AM 04\u201315h</button>'
+    + '<button class="shift-btn' + (CMD_SHIFT==='pm'?' on':'') + '" id="cmd-pm-btn" onclick="cmdRenderDemand(\'pm\')">PM 16\u201303h</button>'
+    + '</div>'
+    + '<div style="display:flex;align-items:center;gap:8px;font-size:9px;color:#94a3b8">'
+    + '<span><span style="display:inline-block;width:8px;height:8px;background:#34d399;border-radius:2px;margin-right:3px"></span>Completed</span>'
+    + '<span><span style="display:inline-block;width:8px;height:8px;background:#f87171;border-radius:2px;margin-right:3px"></span>Cancelled</span>'
+    + '<span><span style="display:inline-block;width:20px;height:2px;background:#94a3b8;border-radius:2px;margin-right:3px;vertical-align:middle"></span>Yesterday</span>'
+    + '</div></div>'
+    + '<div class="chart-area" id="cmd-chart-area">'
+    + '<div class="bars-wrap" id="cmd-demand-bars"></div>'
+    + '<svg class="ghost-svg" id="cmd-ghost-svg" style="pointer-events:none;position:absolute;inset:0;overflow:visible"></svg>'
+    + '</div>'
+    + '</div>';
+}
+
+function cmdRenderDemand(shift) {
+  CMD_SHIFT = shift || CMD_SHIFT;
+  var amBtn = document.getElementById('cmd-am-btn');
+  var pmBtn = document.getElementById('cmd-pm-btn');
+  if (amBtn) amBtn.className = 'shift-btn' + (shift==='am'?' on':'');
+  if (pmBtn) pmBtn.className = 'shift-btn' + (shift==='pm'?' on':'');
+
+  var s    = shift === 'am' ? 0 : 12;
+  var win  = CMD_DEMAND_TODAY.slice(s, s + 12);
+  var ywin = CMD_DEMAND_YEST.slice(s, s + 12);
+  var maxV = Math.max.apply(null, win.concat(ywin).map(function(d){ return d.c + d.x; }).concat([1]));
+  var nowH = new Date().getHours();
+  var el   = document.getElementById('cmd-demand-bars');
+  if (!el) return;
+  el.innerHTML = '';
+
+  win.forEach(function(d, i) {
+    var h = d.h, c = d.c, x = d.x;
+    var isCur = (h === nowH);
+    var isFut = (shift === 'am' && h > nowH && nowH < 16) || (shift === 'pm' && h > nowH && nowH >= 16);
+    var compH  = Math.round(c / maxV * 100);
+    var cancH  = Math.round(x / maxV * 100);
+    var col    = document.createElement('div');
+    col.className = 'bcol';
+    col.style.position = 'relative';
+    col.innerHTML = '<div class="btot" style="color:' + (isFut?'transparent':'#64748b') + '">' + (c+x || '') + '</div>'
+      + '<div class="bstack" style="opacity:' + (isFut?0.2:1) + ';' + (isCur?'outline:2px solid #0066ff;outline-offset:1px':'') + '">'
+      + (cancH > 0 ? '<div class="b-x" style="height:' + cancH + '%"></div>' : '')
+      + (compH > 0 ? '<div class="b-c" style="height:' + compH + '%;' + (isCur?'background:#0066ff':'') + '"></div>' : '')
+      + '</div>'
+      + '<div class="blbl" style="' + (isCur?'color:#0066ff;font-weight:700':'') + '">' + (h < 10 ? '0' : '') + h + ':00</div>';
+    el.appendChild(col);
+  });
+
+  // Yesterday ghost line
+  requestAnimationFrame(function() {
+    var chartArea = document.getElementById('cmd-chart-area');
+    var svg       = document.getElementById('cmd-ghost-svg');
+    if (!chartArea || !svg) return;
+    var cols = el.querySelectorAll('.bcol');
+    if (!cols.length) return;
+    var areaH     = chartArea.offsetHeight - 16 - 12;
+    var topOffset = 12;
+    svg.setAttribute('viewBox', '0 0 ' + chartArea.offsetWidth + ' ' + chartArea.offsetHeight);
+    var points = [];
+    cols.forEach(function(col, i) {
+      var ydata = ywin[i];
+      if (!ydata) return;
+      var total   = ydata.c + ydata.x;
+      var pct     = total / maxV;
+      var colRect  = col.getBoundingClientRect();
+      var areaRect = chartArea.getBoundingClientRect();
+      var cx = colRect.left - areaRect.left + colRect.width / 2;
+      var cy = topOffset + areaH * (1 - pct);
+      points.push(cx + ',' + cy);
+    });
+    if (points.length > 1) {
+      svg.innerHTML = '<polyline points="' + points.join(' ') + '" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>'
+        + points.map(function(p){ var pp=p.split(','); return '<circle cx="'+pp[0]+'" cy="'+pp[1]+'" r="2.5" fill="#94a3b8" opacity="0.45"/>'; }).join('');
+    }
+  });
+}
 function cmdHeatmapPanel()  { return '<div style="padding:24px;color:var(--muted);font-size:12px">Heatmap panel loading...</div>'; }
 function cmdPodsPanel()     { return '<div style="padding:24px;color:var(--muted);font-size:12px">Pods panel loading...</div>'; }
 
