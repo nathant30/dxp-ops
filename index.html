@@ -8183,15 +8183,25 @@ function buildPerformance() {
     totalActive += Number(d.active_drivers  || 0);
   });
 
-  // Primary service for completion % + avg fare (taxi when all)
-  var pvtid = PERF_SVC_FILTER === 'all' ? '16' : PERF_SVC_FILTER;
-  var ps         = svc[pvtid] || {};
-  var pTrips     = Number(ps.trips     || 0);
-  var pCancelled = Number(ps.cancelled || 0);
-  var pExpired   = Number(ps.expired   || 0);
-  var pTotal     = pTrips + pCancelled + pExpired;
-  var pCompRate  = pTotal > 0 ? Math.round(pTrips / pTotal * 100) : 0;
-  var pAvgFare   = Number(ps.avg_fare  || 0);
+  // Completion % + avg fare — aggregate all services when filter is 'all'
+  var pTrips = 0, pCancelled = 0, pExpired = 0, pAvgFare = 0;
+  if (PERF_SVC_FILTER === 'all') {
+    Object.values(svc).forEach(function(s) {
+      pTrips     += Number(s.trips     || 0);
+      pCancelled += Number(s.cancelled || 0);
+      pExpired   += Number(s.expired   || 0);
+    });
+    var _fleetRev = filtSvcs.reduce(function(s, sv) { return s + Number((svc[sv.vtid]||{})[sv.rf] || 0); }, 0);
+    pAvgFare = pTrips > 0 ? Math.round(_fleetRev / pTrips) : 0;
+  } else {
+    var ps     = svc[PERF_SVC_FILTER] || {};
+    pTrips     = Number(ps.trips     || 0);
+    pCancelled = Number(ps.cancelled || 0);
+    pExpired   = Number(ps.expired   || 0);
+    pAvgFare   = Number(ps.avg_fare  || 0);
+  }
+  var pTotal    = pTrips + pCancelled + pExpired;
+  var pCompRate = pTotal > 0 ? Math.round(pTrips / pTotal * 100) : 0;
   var revTarget  = PERF_SVC_FILTER === 'all' ? fleetSalTgt : (PERF_SVC_FILTER === '16' ? fleetTaxiTgt : 0);
   var svcName    = PERF_SVC_FILTER === 'all' ? 'All Services'
     : ((_PERF_SVCS.find(function(s){ return s.vtid === PERF_SVC_FILTER; }) || {}).name || '');
