@@ -7039,24 +7039,6 @@ function renderFinOverview() {
     '</div>';
   })()}
 
-  <!-- Revenue vs Payroll strip -->
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:0 24px 12px">
-    ${(function(){
-      var r=ASSETS.reduce(function(s,a){return s+assetRevToday2(a.asset_id);},0);
-      var t=ASSETS.reduce(function(s,a){return s+getAssetTarget(a.asset_id);},0);
-      var pct=t>0?Math.round(r/t*100):0;
-      var pc=pct>=80?'var(--green)':pct>=50?'var(--amber)':'var(--red)';
-      var act=ASHIFTS.filter(function(s){return s.date===DATA_DATE&&s.status==='active';}).length;
-      var done=ASHIFTS.filter(function(s){return s.date===DATA_DATE&&s.status==='completed';}).length;
-      var pay=(ALL_DRIVERS||D4W).reduce(function(s,d){return s+calcDriverPay(d).gross;},0);
-      var ratio=pay>0?Math.round(r/pay*26*10)/10:0;
-      return '<div class="stat" style="border-left:3px solid '+pc+'"><div class="stat-label">Fleet Rev ('+DATA_DATE+')</div><div class="stat-val" style="font-size:18px;color:'+pc+'">'+fP(r)+'</div><div class="stat-sub">'+pct+'% of '+fP(t)+' target</div></div>'+
-             '<div class="stat"><div class="stat-label">Shifts Today</div><div class="stat-val" style="font-size:18px">'+act+'</div><div class="stat-sub">active · '+done+' completed</div></div>'+
-             '<div class="stat" style="border-left:3px solid var(--red)"><div class="stat-label">Gross Payroll</div><div class="stat-val" style="font-size:18px;color:var(--red)">'+fP(pay)+'</div><div class="stat-sub">'+(ALL_DRIVERS||D4W).length+' drivers · '+FIN_CYCLE.label+'</div></div>'+
-             '<div class="stat" style="border-left:3px solid var(--accent)"><div class="stat-label">Rev / Payroll</div><div class="stat-val" style="font-size:18px;color:var(--accent)">'+ratio+'x</div><div class="stat-sub">monthly est vs payroll</div></div>';
-    })()}
-  </div>
-
   <!-- Smart Insights -->
   ${(function() {
     var flags = [];
