@@ -2283,8 +2283,8 @@ function buildCmd() {
 
   // At-risk drivers (below rev/hr target)
   const atRisk = D4W.filter(d => {
-    const tier = gTier(d);
-    return (tier === 'bench') || (d.csat < 4.2 && tier !== 'champion');
+    const tier = gTier(d.rpd || 0);
+    return (tier === 'Below Threshold') || (d.csat < 4.2 && tier !== 'Champion');
   }).slice(0, 6);
 
   el.innerHTML = `
