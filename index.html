@@ -1163,7 +1163,8 @@ function dbRefreshAll() {
         const inTripNow = Object.values(DB_SERVICES).reduce((s, d) => s + Number(d.in_trip_now || 0), 0);
         if (av) av.textContent = inTripNow.toLocaleString();
       }
-      if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} } }
+      if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} }
+      if (typeof ph2RenderBanner === 'function') { try { ph2RenderBanner(); } catch(e) {} } }
     _done(!!data);
   });
 
@@ -1335,7 +1336,126 @@ function dbRefreshAll() {
 var DB_TODAY = null;
 var DB_DATA_DATE = null;
 var DB_ASSET_REV = {};
-var ACTIVE_SERVICE = 'taxi'; // default to taxi
+var ACTIVE_SERVICE = 'all'; // default — matches banner "All" tab initial state
+
+// ─── PHASE 2 BANNER ──────────────────────────────────────────────────────────
+
+var SVC_TO_VTID = { 'taxi':'16', 'moto-regular':'1', 'go-car':'2', 'go-suv':'3', 'etrike':'10' };
+var SVC_ICONS   = { 'taxi':'🚖', 'moto-regular':'🛵', 'go-car':'🚗', 'go-suv':'🚙', 'etrike':'🛺' };
+var SVC_LABELS  = { 'taxi':'Taxi EV', 'moto-regular':'Moto', 'go-car':'Go Car', 'go-suv':'Go SUV', 'etrike':'e-Trike' };
+
+function ph2SetService(el) {
+  var svc = el.getAttribute('data-svc');
+  document.querySelectorAll('.svc-tab').forEach(function(b){ b.classList.remove('on'); });
+  el.classList.add('on');
+  ACTIVE_SERVICE = svc;
+  ph2RenderBanner();
+  if (typeof buildCmd === 'function') { try { buildCmd(); } catch(e) {} }
+}
+
+function ph2SvcRev(vtid) {
+  var d = (DB_SERVICES && DB_SERVICES[vtid]) || {};
+  if (vtid === '10') return Number(d.trips || 0) * 25;
+  if (vtid === '16') return Number(d.xpress_revenue || 0);
+  return Number(d.commission || 0);
+}
+
+function ph2TrendHtml(pct) {
+  if (pct === null || pct === undefined) return '<div class="chip-trend fl">\u2192 flat vs yesterday</div>';
+  var abs = Math.abs(pct);
+  if (abs <= 1) return '<div class="chip-trend fl">\u2192 flat vs yesterday</div>';
+  if (pct > 0)  return '<div class="chip-trend up">\u2191 +' + abs + '% vs yesterday</div>';
+  return '<div class="chip-trend dn">\u2193 \u2212' + abs + '% vs yesterday</div>';
+}
+
+function ph2RenderBanner() {
+  var svc = ACTIVE_SERVICE;
+  var svcDefs = [
+    { id:'16', svc:'taxi',         icon:'🚖', label:'Taxi EV' },
+    { id:'1',  svc:'moto-regular', icon:'🛵', label:'Moto' },
+    { id:'2',  svc:'go-car',       icon:'🚗', label:'Go Car' },
+    { id:'3',  svc:'go-suv',       icon:'🚙', label:'Go SUV' },
+    { id:'10', svc:'etrike',       icon:'🛺', label:'e-Trike' },
+  ];
+
+  var totRev = 0, totTrips = 0, totCancelled = 0;
+  svcDefs.forEach(function(s) {
+    var d = (DB_SERVICES && DB_SERVICES[s.id]) || {};
+    totRev       += ph2SvcRev(s.id);
+    totTrips     += Number(d.trips || 0);
+    totCancelled += Number(d.cancelled || 0);
+  });
+  var totTarget = ASSETS.reduce(function(s,a){ return s + (a.target || 3000); }, 0) || 1;
+  var revPct = Math.round(totRev / totTarget * 100);
+  var compPct = (totTrips + totCancelled) > 0 ? Math.round(totTrips / (totTrips + totCancelled) * 100) : 0;
+
+  // Banner chips — 5 per-service revenue chips when All, or 5 KPI chips when single service
+  var chipsHtml = '';
+  if (svc === 'all') {
+    svcDefs.forEach(function(s, i) {
+      var rev = ph2SvcRev(s.id);
+      var revK = rev >= 1000 ? '₱' + Math.round(rev/1000) + 'k' : '₱' + rev;
+      var isGreen = s.id === '16'; // Taxi always green chip
+      chipsHtml += '<div class="chip' + (isGreen ? ' green' : '') + '">'
+        + '<div class="chip-val">' + revK + '</div>'
+        + '<div class="chip-lbl">' + s.icon + ' ' + s.label + '</div>'
+        + ph2TrendHtml(null)
+        + '</div>';
+    });
+    chipsHtml += '<div class="chip-divider"></div>'
+      + '<div class="chip"><div class="chip-val">' + totTrips.toLocaleString() + '</div><div class="chip-lbl">total trips</div>' + ph2TrendHtml(null) + '</div>'
+      + '<div class="chip"><div class="chip-val">' + compPct + '%</div><div class="chip-lbl">completion</div>' + ph2TrendHtml(null) + '</div>';
+  } else {
+    var vtid = SVC_TO_VTID[svc] || '16';
+    var d = (DB_SERVICES && DB_SERVICES[vtid]) || {};
+    var rev = ph2SvcRev(vtid);
+    var inTrip  = Number((DB_IN_TRIP_NOW  && DB_IN_TRIP_NOW[vtid])  || 0);
+    var queued  = Number((DB_QUEUED_NOW   && DB_QUEUED_NOW[vtid])   || 0);
+    var trips   = Number(d.trips   || 0);
+    var cancels = Number(d.cancelled || 0);
+    var sComp   = (trips + cancels) > 0 ? Math.round(trips / (trips + cancels) * 100) : 0;
+    var avgFare = trips > 0 ? Math.round(rev / trips) : 0;
+    var revK = rev >= 1000 ? '₱' + Math.round(rev/1000) + 'k' : '₱' + rev;
+    chipsHtml = [
+      { val: (inTrip + queued), lbl: 'active drivers', cls: 'green' },
+      { val: trips,             lbl: 'trips today',    cls: '' },
+      { val: revK,              lbl: 'revenue',         cls: '' },
+      { val: '₱' + avgFare,    lbl: 'avg fare',        cls: '' },
+      { val: cancels,           lbl: 'cancels',         cls: cancels > 10 ? 'amber' : '' },
+    ].map(function(c) {
+      return '<div class="chip' + (c.cls ? ' ' + c.cls : '') + '">'
+        + '<div class="chip-val">' + c.val + '</div>'
+        + '<div class="chip-lbl">' + c.lbl + '</div>'
+        + ph2TrendHtml(null)
+        + '</div>';
+    }).join('');
+    chipsHtml += '<div class="chip-divider"></div>'
+      + '<div class="chip"><div class="chip-val">' + trips + '</div><div class="chip-lbl">trips</div>' + ph2TrendHtml(null) + '</div>'
+      + '<div class="chip"><div class="chip-val">' + sComp + '%</div><div class="chip-lbl">completion</div>' + ph2TrendHtml(null) + '</div>';
+  }
+
+  var chipsEl = document.getElementById('banner-chips');
+  if (chipsEl) chipsEl.innerHTML = chipsHtml;
+
+  // Fleet total box
+  var revDisp = totRev >= 1000 ? '₱' + Math.round(totRev/1000).toLocaleString() + 'k' : '₱' + totRev;
+  var ftEl = document.getElementById('banner-fleet-total');
+  if (ftEl) ftEl.innerHTML = ''
+    + '<div class="fleet-total-lbl">\u229e Fleet Total</div>'
+    + '<div class="fleet-total-val">' + revDisp + '</div>'
+    + '<div class="fleet-total-trend" style="color:#16a34a">\u2191 vs yesterday</div>'
+    + '<div class="fleet-total-track"><div class="fleet-total-fill" style="width:' + Math.min(revPct,100) + '%"></div></div>'
+    + '<div class="fleet-total-pct">' + revPct + '% of daily target</div>';
+
+  // Footer strip
+  var ragOk = compPct >= 85;
+  var foEl = document.getElementById('banner-footer');
+  if (foEl) foEl.innerHTML = ''
+    + '<span style="font-size:10px;font-weight:600;color:var(--ink)">\u229e ' + (svc === 'all' ? 'All Services' : (SVC_ICONS[svc] || '') + ' ' + (SVC_LABELS[svc] || svc)) + '</span>'
+    + '<span class="' + (ragOk ? 'rag-badge-ok' : 'rag-badge-warn') + '">' + (ragOk ? 'On Track' : 'At Risk') + '</span>'
+    + '<span style="font-size:10px;color:var(--muted)">' + revPct + '% of target · ' + new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) + ' · Databricks</span>';
+}
+
 var OPS_DAY_CONFIG = {
   day_start_hour: 4,
   am_shift: { start_hour: 4, end_hour: 15, label: 'AM (4AM–3PM)' },
@@ -1749,7 +1869,7 @@ function goS(s) {
   if (sec) sec.classList.add('on');
   if (btn) btn.classList.add('on');
   closeDrawer();
-  if (s === 'cmd') buildCmd();
+  if (s === 'cmd') { buildCmd(); if (typeof ph2RenderBanner === 'function') ph2RenderBanner(); }
   else if (s === 'fleet') buildFleet();
   else if (s === 'assets') buildAssets();
   else if (s === 'teams') buildTeams();
