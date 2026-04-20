@@ -5,60 +5,66 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DXP Operations — Xpress</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
 <style>
 /* ─── DESIGN TOKENS ─────────────────────────────────────────────────────── */
 :root {
-  /* Color palette */
-  --ink:    #0A0F1E;
-  --ink2:   #4A5568;
-  --ink3:   #94A3B8;
-  --surface:#F1F5F9;
-  --card:   #FFFFFF;
-  --border: #E2E8F0;
-  --navy:   #0A1628;
-  --navy2:  #112040;
-  --accent: #0066FF;
-  --accent2:#4D94FF;
-  --green:  #059669;
-  --green-b:#D1FAE5;
-  --amber:  #D97706;
-  --amber-b:#FEF3C7;
-  --red:    #DC2626;
-  --red-b:  #FEE2E2;
-  --gold:   #B45309;
-  --gold-b: #FEF3C7;
+  /* Wellfind light palette */
+  --ink:    #0f172a;
+  --ink2:   #334155;
+  --ink3:   #64748b;
+  --muted:  #94a3b8;
+  --surface:#f7f9fb;
+  --card:   #ffffff;
+  --border: #e2e8f0;
+  --sidebar-bg: #f8fafc;
+  --accent: #0066ff;
+  --accent2:#4d94ff;
+  --green:  #16a34a;
+  --green-b:#f0fdf4;
+  --green-brd:#bbf7d0;
+  --amber:  #92400e;
+  --amber-b:#fffbeb;
+  --amber-brd:#fde68a;
+  --red:    #dc2626;
+  --red-b:  #fef2f2;
+  --red-brd:#fecaca;
+  --gold:   #b45309;
+  --gold-b: #fef3c7;
 
-  /* Tier colors */
-  --t-champion:#7C3AED; --t-champion-b:#EDE9FE;
-  --t-pro:     #0066FF; --t-pro-b:     #DBEAFE;
-  --t-active:  #059669; --t-active-b:  #D1FAE5;
-  --t-standard:#D97706; --t-standard-b:#FEF3C7;
-  --t-bench:   #64748B; --t-bench-b:   #F1F5F9;
+  /* Tier colors — kept for existing fleet/driver components */
+  --t-champion:#166534; --t-champion-b:#f0fdf4;
+  --t-pro:     #1d4ed8; --t-pro-b:     #eff6ff;
+  --t-active:  #92400e; --t-active-b:  #fffbeb;
+  --t-standard:#dc2626; --t-standard-b:#fef2f2;
+  --t-bench:   #64748b; --t-bench-b:   #f8fafc;
 
   /* Typography */
-  --f-ui:   'Outfit', sans-serif;
-  --f-mono: 'JetBrains Mono', monospace;
+  --f-ui:   'Inter', system-ui, sans-serif;
+  --f-mono: 'Manrope', system-ui, sans-serif;
+  --f-num:  'Manrope', system-ui, sans-serif;
 
   /* Spacing */
   --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px;
 
   /* Radius */
-  --r:8px; --rl:12px; --rxl:16px;
+  --r:8px; --rl:10px; --rxl:14px;
 
   /* Shadows */
-  --sh-sm:0 1px 2px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.1);
-  --sh-md:0 4px 6px -1px rgba(0,0,0,.07),0 2px 4px -1px rgba(0,0,0,.06);
-  --sh-lg:0 10px 15px -3px rgba(0,0,0,.08),0 4px 6px -2px rgba(0,0,0,.05);
+  --sh-sm:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --sh-md:0 4px 12px rgba(0,0,0,.08);
+  --sh-lg:0 10px 30px rgba(0,0,0,.1);
 
-  /* Nav */
-  --nav-w: 56px;
-  --top-h: 48px;
+  /* Layout */
+  --nav-w: 220px;
+  --top-h: 0px;
 }
 
 /* ─── RESET ─────────────────────────────────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;font-family:var(--f-ui);font-size:14px;color:var(--ink);background:var(--surface)}
+html,body{height:100%;font-family:var(--f-ui);font-size:13px;color:var(--ink);background:var(--surface)}
 button{font-family:var(--f-ui);cursor:pointer;border:none;outline:none}
 input,select,textarea{font-family:var(--f-ui);outline:none}
 a{text-decoration:none;color:inherit}
