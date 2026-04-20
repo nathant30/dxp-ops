@@ -2219,7 +2219,6 @@ var CMD_DEMAND_YEST = [
 
 function cmdDemandPanel() {
   var nowH = new Date().getHours();
-  CMD_SHIFT = nowH < 16 ? 'am' : 'pm';
   return '<div class="demand-wrap">'
     + '<div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'
     + '<div class="shift-toggle">'
@@ -2250,14 +2249,17 @@ function cmdRenderDemand(shift) {
   var ywin = CMD_DEMAND_YEST.slice(s, s + 12);
   var maxV = Math.max.apply(null, win.concat(ywin).map(function(d){ return d.c + d.x; }).concat([1]));
   var nowH = new Date().getHours();
+  var nowIdx = (shift === 'am')
+    ? (nowH >= 4 && nowH <= 15 ? nowH - 4 : -1)
+    : (nowH >= 16 ? nowH - 16 : nowH + 8);
   var el   = document.getElementById('cmd-demand-bars');
   if (!el) return;
   el.innerHTML = '';
 
   win.forEach(function(d, i) {
     var h = d.h, c = d.c, x = d.x;
-    var isCur = (h === nowH);
-    var isFut = (shift === 'am' && h > nowH && nowH < 16) || (shift === 'pm' && h > nowH && nowH >= 16);
+    var isCur = (i === nowIdx);
+    var isFut = (i > nowIdx && nowIdx >= 0);
     var compH  = Math.round(c / maxV * 100);
     var cancH  = Math.round(x / maxV * 100);
     var col    = document.createElement('div');
