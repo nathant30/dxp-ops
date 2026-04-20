@@ -1345,7 +1345,9 @@ var SVC_ICONS   = { 'taxi':'🚖', 'moto-regular':'🛵', 'go-car':'🚗', 'go-s
 var SVC_LABELS  = { 'taxi':'Taxi EV', 'moto-regular':'Moto', 'go-car':'Go Car', 'go-suv':'Go SUV', 'etrike':'e-Trike' };
 
 function ph2SetService(el) {
+  if (!el) return;
   var svc = el.getAttribute('data-svc');
+  if (!svc) return;
   document.querySelectorAll('.svc-tab').forEach(function(b){ b.classList.remove('on'); });
   el.classList.add('on');
   ACTIVE_SERVICE = svc;
@@ -1362,7 +1364,7 @@ function ph2SvcRev(vtid) {
 
 function ph2TrendHtml(pct) {
   if (pct === null || pct === undefined) return '<div class="chip-trend fl">\u2192 flat vs yesterday</div>';
-  var abs = Math.abs(pct);
+  var abs = Math.round(Math.abs(pct));
   if (abs <= 1) return '<div class="chip-trend fl">\u2192 flat vs yesterday</div>';
   if (pct > 0)  return '<div class="chip-trend up">\u2191 +' + abs + '% vs yesterday</div>';
   return '<div class="chip-trend dn">\u2193 \u2212' + abs + '% vs yesterday</div>';
