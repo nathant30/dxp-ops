@@ -2006,7 +2006,7 @@ function cmdSwitchTab(name, el) {
   var panel = document.getElementById('cpanel-' + name);
   if (panel) panel.classList.add('on');
   if (name === 'demand') { if (typeof cmdRenderDemand === 'function') cmdRenderDemand(CMD_SHIFT); }
-  if (name === 'heatmap') { if (typeof cmdInitMap === 'function') cmdInitMap(); }
+  if (name === 'heatmap') { setTimeout(function(){ if (typeof cmdInitMap === 'function') cmdInitMap(); }, 50); }
 }
 
 var CMD_SHIFT = (new Date().getHours() < 16) ? 'am' : 'pm';
