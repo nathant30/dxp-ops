@@ -1781,10 +1781,10 @@ function buildCmd() {
 
   const driverSegments = (function() {
     const sorted = D4W.slice().sort(function(a,b){ return (b.rpd||0)-(a.rpd||0); });
-    const top   = sorted.filter(function(d){ return (d.rpd||0) >= 2500; });
-    const track = sorted.filter(function(d){ return (d.rpd||0) >= 1800 && (d.rpd||0) < 2500; });
-    const risk  = sorted.filter(function(d){ return (d.rpd||0) >= 1200 && (d.rpd||0) < 1800; });
-    const crit  = sorted.filter(function(d){ return (d.rpd||0) > 0    && (d.rpd||0) < 1200; });
+    const top   = sorted.filter(function(d){ return (d.rpd||0) >= 3000; });                        // Champion
+    const track = sorted.filter(function(d){ return (d.rpd||0) >= 2001 && (d.rpd||0) < 3000; });   // Pro + Active
+    const risk  = sorted.filter(function(d){ return (d.rpd||0) >= 1600 && (d.rpd||0) < 2001; });   // Standard
+    const crit  = sorted.filter(function(d){ return (d.rpd||0) > 0    && (d.rpd||0) < 1600; });    // Below Threshold
     return { top, track, risk, crit };
   })();
 
