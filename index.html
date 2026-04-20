@@ -7223,10 +7223,12 @@ function finPayCols() {
     ['perf','Performance','right'],
     ['quest','Quest','right'],
     ['captainPay','Captain','right'],
+    ['podBonus','Pod Bonus','right'],
     ['crashPenalty','Deductions','right'],
     ['gross', FIN_SHOW_BASE ? 'Gross Pay' : 'Variable Total', 'right'],
     ['totalDeductions','Gov. Deduct.','right'],
     ['netPay','Net Pay','right'],
+    ['_nav','','center'],
   );
   return cols;
 }
@@ -7250,7 +7252,6 @@ function renderFinDrivers() {
             ${label} ${FIN_SORT===key?(FIN_DIR>0?'↑':'↓'):''}
           </th>`
         ).join('')}
-        <th style="padding:8px 12px;font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase">Details</th>
       </tr>
     </thead>
     <tbody id="fin-tbody"></tbody>
@@ -7303,19 +7304,12 @@ function finRenderRows() {
           const dv = p.totalDeductions || 0;
           return `<td style="${cellStyle};font-family:var(--f-mono);font-size:11px;color:var(--red)">${dv>0?'-'+fP(dv):'—'}</td>`;
         }
+        if (key === '_nav') return `<td style="${cellStyle}"><span style="font-size:16px" title="Click row for payslip">→</span></td>`;
         const val = p[key] || 0;
         const col = key==='crashPenalty' ? 'var(--red)' : key==='captainPay' ? 'var(--gold)' : key==='gross' ? 'var(--ink)' : val>0 ? 'var(--ink)' : 'var(--ink3)';
         const display = key==='crashPenalty' && val>0 ? '-'+fP(val) : val>0 ? fP(val) : '—';
         return `<td style="${cellStyle};font-family:var(--f-mono);font-weight:${key==='gross'?800:600};color:${col}">${display}</td>`;
       }).join('')}
-      <td style="padding:8px 12px;text-align:right;font-family:var(--f-mono);color:${p.reliability>0?'var(--green)':'var(--ink3)'}">${p.reliability > 0 ? fP(p.reliability) : '—'}</td>
-      <td style="padding:8px 12px;text-align:right;font-family:var(--f-mono);color:${p.perf>0?'var(--accent)':'var(--ink3)'}">${p.perf > 0 ? fP(p.perf) : '—'}</td>
-      <td style="padding:8px 12px;text-align:right;font-family:var(--f-mono);color:${p.quest>0?'var(--green)':'var(--ink3)'}">${p.quest > 0 ? fP(p.quest) : '—'}</td>
-      <td style="padding:8px 12px;text-align:right;font-family:var(--f-mono);color:${p.podBonus>0?'var(--accent)':'var(--ink3)'}">${p.podBonus > 0 ? fP(p.podBonus) : '—'}</td>
-      <td style="padding:8px 12px;text-align:right;font-family:var(--f-mono);color:${p.captainPay>0?'var(--gold)':'var(--ink3)'}">${p.captainPay > 0 ? fP(p.captainPay) : '—'}</td>
-      <td style="padding:8px 12px;text-align:right;font-family:var(--f-mono);color:${p.crashPenalty>0?'var(--red)':'var(--ink3)'}">${p.crashPenalty > 0 ? '-'+fP(p.crashPenalty) : '—'}</td>
-      <td style="padding:8px 12px;text-align:right;font-family:var(--f-mono);font-size:13px;font-weight:800;color:var(--ink)">${fP(p.gross)}</td>
-      <td style="padding:8px 12px;text-align:center"><span style="font-size:16px" title="Click row for payslip">→</span></td>
     </tr>`).join('');
 }
 
