@@ -1372,7 +1372,7 @@ function assetRevPeriod2(id,days){
 function assetAvgRph(id){
   const sh=assetShiftsFor(id).filter(s=>s.status==='completed');
   if(!sh.length)return 0;
-  return Math.round(sh.reduce((a,s)=>a+s.gross_revenue,0)/sh.reduce((a,s)=>a+9,0));
+  return Math.round(sh.reduce((a,s)=>a+s.gross_revenue,0)/sh.reduce((a,s)=>a+(s.shift_hours||9),0));
 }
 
 function assetUtilPct(id){
@@ -1497,8 +1497,9 @@ function calcUE(ue){
 
 function fuelLogsForAsset(assetId){return FUEL_LOG.filter(f=>f.asset_id===assetId).sort((a,b)=>b.date.localeCompare(a.date));}
 
+// Pending: fuel costs will populate once driver app → vehicle assignment API is connected
 function fuelThisMonth(assetId){
-  const now='2026-04';
+  const now = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
   return FUEL_LOG.filter(f=>f.asset_id===assetId&&f.date.startsWith(now)).reduce((a,f)=>a+f.cost,0);
 }
 
@@ -1615,7 +1616,7 @@ let FLEET_FILTER = 'all';
 let ASSET_FILTER = 'all';
 let DRAWER_CTX = null;
 let DRAWER_TAB = 'overview';
-let _refreshAt2 = new Date('2026-04-09T08:29:00Z');
+let _refreshAt2 = null;
 
 // ─── CORE UI ──────────────────────────────────────────────────────────────────
 function goS(s) {
@@ -1715,9 +1716,9 @@ function updateTopbar() {
 
 // ─── REFRESH BADGE ─────────────────────────────────────────────────────────────
 function updateAgeBadge() {
-  const mins = Math.floor((Date.now() - _refreshAt2.getTime()) / 60000);
-  const label = mins < 1 ? 'live' : mins < 60 ? mins + 'm ago' : Math.floor(mins / 60) + 'h ago';
-  const col = mins > 30 ? '#D97706' : mins > 10 ? 'rgba(255,255,255,.6)' : '#6EE7B7';
+  const mins = _refreshAt2 ? Math.floor((Date.now() - _refreshAt2.getTime()) / 60000) : null;
+  const label = mins === null ? '—' : mins < 1 ? 'live' : mins < 60 ? mins + 'm ago' : Math.floor(mins / 60) + 'h ago';
+  const col = mins === null ? 'rgba(255,255,255,.6)' : mins > 30 ? '#D97706' : mins > 10 ? 'rgba(255,255,255,.6)' : '#6EE7B7';
   const el = document.getElementById('tb-age');
   const el2 = document.getElementById('nb-age');
   if (el) { el.textContent = label; el.style.color = col; }
@@ -1781,10 +1782,10 @@ function buildCmd() {
 
   const driverSegments = (function() {
     const sorted = D4W.slice().sort(function(a,b){ return (b.rpd||0)-(a.rpd||0); });
-    const top   = sorted.filter(function(d){ return (d.rpd||0) >= 2500; });
-    const track = sorted.filter(function(d){ return (d.rpd||0) >= 1800 && (d.rpd||0) < 2500; });
-    const risk  = sorted.filter(function(d){ return (d.rpd||0) >= 1200 && (d.rpd||0) < 1800; });
-    const crit  = sorted.filter(function(d){ return (d.rpd||0) > 0    && (d.rpd||0) < 1200; });
+    const top   = sorted.filter(function(d){ return (d.rpd||0) >= 3000; });                        // Champion
+    const track = sorted.filter(function(d){ return (d.rpd||0) >= 2001 && (d.rpd||0) < 3000; });   // Pro + Active
+    const risk  = sorted.filter(function(d){ return (d.rpd||0) >= 1600 && (d.rpd||0) < 2001; });   // Standard
+    const crit  = sorted.filter(function(d){ return (d.rpd||0) > 0    && (d.rpd||0) < 1600; });    // Below Threshold
     return { top, track, risk, crit };
   })();
 
@@ -2206,7 +2207,7 @@ function buildCmd() {
           +'<span>Driver</span><span style="text-align:right">Trips</span><span style="text-align:right">GTV</span>'
           +'<span style="text-align:right">Commission</span>'
           +'<span style="text-align:right">Incentive</span>'
-          +'<span style="text-align:right">vs avg</span></div>';
+          +'<span style="text-align:right">vs median</span></div>';
         var dr3=selMktList.slice(0,10).map(function(d){
           var va=selMed>0?Math.round((d.gtv-selMed)/selMed*100):0;
           var vc=va>=20?'#34D399':va>=-10?'var(--ink3)':'#F59E0B';
@@ -2283,8 +2284,8 @@ function buildCmd() {
 
   // At-risk drivers (below rev/hr target)
   const atRisk = D4W.filter(d => {
-    const tier = gTier(d);
-    return (tier === 'bench') || (d.csat < 4.2 && tier !== 'champion');
+    const tier = gTier(d.rpd || 0);
+    return (tier === 'Below Threshold') || (d.csat < 4.2 && tier !== 'Champion');
   }).slice(0, 6);
 
   el.innerHTML = `
@@ -2476,7 +2477,7 @@ function buildCmd() {
           +'<span>Driver</span><span style="text-align:right">Trips</span><span style="text-align:right">GTV</span>'
           +'<span style="text-align:right">Commission</span>'
           +'<span style="text-align:right">Incentive</span>'
-          +'<span style="text-align:right">vs avg</span></div>';
+          +'<span style="text-align:right">vs median</span></div>';
         var dr=mktDrivers.list.slice(0,10).map(function(d){
           var va=mktDrivers.median>0?Math.round((d.gtv-mktDrivers.median)/mktDrivers.median*100):0;
           var vc=va>=20?'#34D399':va>=-10?'var(--ink3)':'#F59E0B';
@@ -7039,24 +7040,6 @@ function renderFinOverview() {
     '</div>';
   })()}
 
-  <!-- Revenue vs Payroll strip -->
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:0 24px 12px">
-    ${(function(){
-      var r=ASSETS.reduce(function(s,a){return s+assetRevToday2(a.asset_id);},0);
-      var t=ASSETS.reduce(function(s,a){return s+getAssetTarget(a.asset_id);},0);
-      var pct=t>0?Math.round(r/t*100):0;
-      var pc=pct>=80?'var(--green)':pct>=50?'var(--amber)':'var(--red)';
-      var act=ASHIFTS.filter(function(s){return s.date===DATA_DATE&&s.status==='active';}).length;
-      var done=ASHIFTS.filter(function(s){return s.date===DATA_DATE&&s.status==='completed';}).length;
-      var pay=(ALL_DRIVERS||D4W).reduce(function(s,d){return s+calcDriverPay(d).gross;},0);
-      var ratio=pay>0?Math.round(r/pay*26*10)/10:0;
-      return '<div class="stat" style="border-left:3px solid '+pc+'"><div class="stat-label">Fleet Rev ('+DATA_DATE+')</div><div class="stat-val" style="font-size:18px;color:'+pc+'">'+fP(r)+'</div><div class="stat-sub">'+pct+'% of '+fP(t)+' target</div></div>'+
-             '<div class="stat"><div class="stat-label">Shifts Today</div><div class="stat-val" style="font-size:18px">'+act+'</div><div class="stat-sub">active · '+done+' completed</div></div>'+
-             '<div class="stat" style="border-left:3px solid var(--red)"><div class="stat-label">Gross Payroll</div><div class="stat-val" style="font-size:18px;color:var(--red)">'+fP(pay)+'</div><div class="stat-sub">'+(ALL_DRIVERS||D4W).length+' drivers · '+FIN_CYCLE.label+'</div></div>'+
-             '<div class="stat" style="border-left:3px solid var(--accent)"><div class="stat-label">Rev / Payroll</div><div class="stat-val" style="font-size:18px;color:var(--accent)">'+ratio+'x</div><div class="stat-sub">monthly est vs payroll</div></div>';
-    })()}
-  </div>
-
   <!-- Smart Insights -->
   ${(function() {
     var flags = [];
@@ -7223,10 +7206,12 @@ function finPayCols() {
     ['perf','Performance','right'],
     ['quest','Quest','right'],
     ['captainPay','Captain','right'],
+    ['podBonus','Pod Bonus','right'],
     ['crashPenalty','Deductions','right'],
     ['gross', FIN_SHOW_BASE ? 'Gross Pay' : 'Variable Total', 'right'],
     ['totalDeductions','Gov. Deduct.','right'],
     ['netPay','Net Pay','right'],
+    ['_nav','','center'],
   );
   return cols;
 }
@@ -7250,7 +7235,6 @@ function renderFinDrivers() {
             ${label} ${FIN_SORT===key?(FIN_DIR>0?'↑':'↓'):''}
           </th>`
         ).join('')}
-        <th style="padding:8px 12px;font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase">Details</th>
       </tr>
     </thead>
     <tbody id="fin-tbody"></tbody>
@@ -7303,19 +7287,12 @@ function finRenderRows() {
           const dv = p.totalDeductions || 0;
           return `<td style="${cellStyle};font-family:var(--f-mono);font-size:11px;color:var(--red)">${dv>0?'-'+fP(dv):'—'}</td>`;
         }
+        if (key === '_nav') return `<td style="${cellStyle}"><span style="font-size:16px" title="Click row for payslip">→</span></td>`;
         const val = p[key] || 0;
         const col = key==='crashPenalty' ? 'var(--red)' : key==='captainPay' ? 'var(--gold)' : key==='gross' ? 'var(--ink)' : val>0 ? 'var(--ink)' : 'var(--ink3)';
         const display = key==='crashPenalty' && val>0 ? '-'+fP(val) : val>0 ? fP(val) : '—';
         return `<td style="${cellStyle};font-family:var(--f-mono);font-weight:${key==='gross'?800:600};color:${col}">${display}</td>`;
       }).join('')}
-      <td style="padding:8px 12px;text-align:right;font-family:var(--f-mono);color:${p.reliability>0?'var(--green)':'var(--ink3)'}">${p.reliability > 0 ? fP(p.reliability) : '—'}</td>
-      <td style="padding:8px 12px;text-align:right;font-family:var(--f-mono);color:${p.perf>0?'var(--accent)':'var(--ink3)'}">${p.perf > 0 ? fP(p.perf) : '—'}</td>
-      <td style="padding:8px 12px;text-align:right;font-family:var(--f-mono);color:${p.quest>0?'var(--green)':'var(--ink3)'}">${p.quest > 0 ? fP(p.quest) : '—'}</td>
-      <td style="padding:8px 12px;text-align:right;font-family:var(--f-mono);color:${p.podBonus>0?'var(--accent)':'var(--ink3)'}">${p.podBonus > 0 ? fP(p.podBonus) : '—'}</td>
-      <td style="padding:8px 12px;text-align:right;font-family:var(--f-mono);color:${p.captainPay>0?'var(--gold)':'var(--ink3)'}">${p.captainPay > 0 ? fP(p.captainPay) : '—'}</td>
-      <td style="padding:8px 12px;text-align:right;font-family:var(--f-mono);color:${p.crashPenalty>0?'var(--red)':'var(--ink3)'}">${p.crashPenalty > 0 ? '-'+fP(p.crashPenalty) : '—'}</td>
-      <td style="padding:8px 12px;text-align:right;font-family:var(--f-mono);font-size:13px;font-weight:800;color:var(--ink)">${fP(p.gross)}</td>
-      <td style="padding:8px 12px;text-align:center"><span style="font-size:16px" title="Click row for payslip">→</span></td>
     </tr>`).join('');
 }
 
@@ -8183,15 +8160,25 @@ function buildPerformance() {
     totalActive += Number(d.active_drivers  || 0);
   });
 
-  // Primary service for completion % + avg fare (taxi when all)
-  var pvtid = PERF_SVC_FILTER === 'all' ? '16' : PERF_SVC_FILTER;
-  var ps         = svc[pvtid] || {};
-  var pTrips     = Number(ps.trips     || 0);
-  var pCancelled = Number(ps.cancelled || 0);
-  var pExpired   = Number(ps.expired   || 0);
-  var pTotal     = pTrips + pCancelled + pExpired;
-  var pCompRate  = pTotal > 0 ? Math.round(pTrips / pTotal * 100) : 0;
-  var pAvgFare   = Number(ps.avg_fare  || 0);
+  // Completion % + avg fare — aggregate all services when filter is 'all'
+  var pTrips = 0, pCancelled = 0, pExpired = 0, pAvgFare = 0;
+  if (PERF_SVC_FILTER === 'all') {
+    Object.values(svc).forEach(function(s) {
+      pTrips     += Number(s.trips     || 0);
+      pCancelled += Number(s.cancelled || 0);
+      pExpired   += Number(s.expired   || 0);
+    });
+    var _fleetRev = filtSvcs.reduce(function(s, sv) { return s + Number((svc[sv.vtid]||{})[sv.rf] || 0); }, 0);
+    pAvgFare = pTrips > 0 ? Math.round(_fleetRev / pTrips) : 0;
+  } else {
+    var ps     = svc[PERF_SVC_FILTER] || {};
+    pTrips     = Number(ps.trips     || 0);
+    pCancelled = Number(ps.cancelled || 0);
+    pExpired   = Number(ps.expired   || 0);
+    pAvgFare   = Number(ps.avg_fare  || 0);
+  }
+  var pTotal    = pTrips + pCancelled + pExpired;
+  var pCompRate = pTotal > 0 ? Math.round(pTrips / pTotal * 100) : 0;
   var revTarget  = PERF_SVC_FILTER === 'all' ? fleetSalTgt : (PERF_SVC_FILTER === '16' ? fleetTaxiTgt : 0);
   var svcName    = PERF_SVC_FILTER === 'all' ? 'All Services'
     : ((_PERF_SVCS.find(function(s){ return s.vtid === PERF_SVC_FILTER; }) || {}).name || '');
@@ -8587,7 +8574,8 @@ function _buildAssetLeaderboard() {
     var tripsToday = m.am_trips_today + m.pm_trips_today || 0;
     var revMtd = m.rev_mtd || 0;
     var utilHrs = m.utilized_hrs || 0;
-    var utilPct = utilHrs > 0 ? Math.round(utilHrs / 9 * 100) : 0;
+    var shiftLen = m.shift_hours || 9;
+    var utilPct  = utilHrs > 0 ? Math.round(utilHrs / shiftLen * 100) : 0;
     var vs = assetTgt > 0 ? Math.round(revToday / assetTgt * 100) : null;
     return { plate: a.plate || a.asset_id, depot: a.depot || '\u2014', revToday: revToday, tripsToday: tripsToday, revMtd: revMtd, utilPct: utilPct, vs: vs };
   }).sort(function(a, b){ return b.revToday - a.revToday; });
