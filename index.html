@@ -2206,7 +2206,7 @@ function buildCmd() {
           +'<span>Driver</span><span style="text-align:right">Trips</span><span style="text-align:right">GTV</span>'
           +'<span style="text-align:right">Commission</span>'
           +'<span style="text-align:right">Incentive</span>'
-          +'<span style="text-align:right">vs avg</span></div>';
+          +'<span style="text-align:right">vs median</span></div>';
         var dr3=selMktList.slice(0,10).map(function(d){
           var va=selMed>0?Math.round((d.gtv-selMed)/selMed*100):0;
           var vc=va>=20?'#34D399':va>=-10?'var(--ink3)':'#F59E0B';
@@ -2476,7 +2476,7 @@ function buildCmd() {
           +'<span>Driver</span><span style="text-align:right">Trips</span><span style="text-align:right">GTV</span>'
           +'<span style="text-align:right">Commission</span>'
           +'<span style="text-align:right">Incentive</span>'
-          +'<span style="text-align:right">vs avg</span></div>';
+          +'<span style="text-align:right">vs median</span></div>';
         var dr=mktDrivers.list.slice(0,10).map(function(d){
           var va=mktDrivers.median>0?Math.round((d.gtv-mktDrivers.median)/mktDrivers.median*100):0;
           var vc=va>=20?'#34D399':va>=-10?'var(--ink3)':'#F59E0B';
