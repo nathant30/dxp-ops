@@ -1542,13 +1542,12 @@ function getServiceData(serviceId) {
   };
 }
 
-// Override assetRevToday2 to use live DB data when available
-var _origAssetRevToday2 = typeof assetRevToday2 === 'function' ? assetRevToday2 : function() { return 0; };
+// assetRevToday2: use live DB data when available, fall back to shift data
 function assetRevToday2(assetId) {
   if (DB_ASSET_REV && DB_ASSET_REV[String(assetId)] !== undefined) {
     return DB_ASSET_REV[String(assetId)];
   }
-  return _origAssetRevToday2(assetId);
+  return assetRevDate(assetId, DATA_DATE);
 }
 
 
@@ -1601,7 +1600,7 @@ function assetActiveShift(id){return ASHIFTS.find(s=>s.asset_id===id&&s.status==
 
 function assetRevDate(id,date){return assetShiftsDate(id,date).reduce((a,s)=>a+s.gross_revenue,0);}
 
-function assetRevToday2(id){return assetRevDate(id,DATA_DATE);}
+// assetRevToday2 defined above (DB_ASSET_REV-aware)
 
 function assetRevPeriod2(id,days){
   return Array.from({length:days},(_,i)=>{const d=new Date(TODAY);d.setDate(d.getDate()-i);return d.toISOString().slice(0,10);}).reduce((a,dt)=>a+assetRevDate(id,dt),0);
@@ -2100,7 +2099,7 @@ function showDriverPerf(mode) {
 // ─── COMMAND CENTER PANELS — implemented in Tasks 7–11 ──────────────────────
 function cmdFleetPanel() {
   var activeShifts = ASHIFTS.filter(function(s){ return s.date === DATA_DATE && s.status === 'active'; });
-  var atRiskThreshold = _perfCfg ? _perfCfg('taxi_at_risk_min', 1600) : 1600;
+  var atRiskThreshold = typeof _perfCfg === 'function' ? _perfCfg('taxi_at_risk_min', 1600) : 1600;
 
   // Compute fleet status from ASSETS and live shift data
   var activeCount = activeShifts.length;
@@ -2110,7 +2109,7 @@ function cmdFleetPanel() {
     var isOnShift = activeShifts.find(function(s){ return String(s.vehicle_id) === String(a.vehicle_id); });
     return isOnShift && revToday < atRiskThreshold && tripsToday > 0;
   });
-  var noShiftCount = ASSETS.length - activeCount;
+  var noShiftCount = Math.max(0, ASSETS.length - activeCount);
   var atRiskCount = atRiskAssets.length;
 
   var atRiskRows = atRiskAssets.slice(0, 8).map(function(a) {
@@ -2140,7 +2139,7 @@ function cmdFleetPanel() {
     + '<button class="view-all-link" onclick="goS(\'assets\')">\u2192 View all ' + moreCount + ' in Vehicles</button></div>'
     + (atRiskRows.length > 0
       ? '<table style="flex:1"><thead><tr><th>Plate</th><th>Type</th><th>Status</th><th>Rev Today</th><th style="min-width:80px">Progress</th></tr></thead><tbody>' + atRiskRows + '</tbody></table>'
-      + '<div class="tbl-footer">Showing at-risk vehicles only \u00b7 <span style="color:#16a34a">\u2713 ' + (activeCount - atRiskCount) + ' running normally</span></div>'
+      + '<div class="tbl-footer">Showing at-risk vehicles only \u00b7 <span style="color:#16a34a">\u2713 ' + Math.max(0, activeCount - atRiskCount) + ' running normally</span></div>'
       : '<div style="padding:24px;text-align:center;font-size:12px;color:#94a3b8">\u2713 No vehicles need immediate attention</div>');
 }
 function cmdSegmentsPanel() {
