@@ -3810,6 +3810,10 @@ function buildSchedule() {
   if(di) SCHED_DATE = di.value || TODAY_PH;
   SCHED_SHIFTS = lsGet('sched_shifts_'+SCHED_DATE,[]);
   SCHED_PUB = lsGet('sched_pub_'+SCHED_DATE,null);
+  // Update page header subtitle
+  var schedSub = document.getElementById('sched-board-sub-ph');
+  if (schedSub) schedSub.textContent = SCHED_DATE + ' · ' + SCHED_SHIFTS.length + ' shifts assigned'
+    + (SCHED_PUB ? ' · ✓ Published' : '');
   // activate current tab
   var curPill = document.getElementById('stab-'+SCHED_CUR_TAB);
   goSchedTab(SCHED_CUR_TAB, curPill);
