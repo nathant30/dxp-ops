@@ -2182,7 +2182,7 @@ function cmdSegmentsPanel() {
   }
 
   function shiftBadge(d) {
-    var dShift = ASHIFTS.find(function(s){ return String(s.driver_id) === String(d.id) && s.date === DATA_DATE && s.status === 'active'; });
+    var dShift = ASHIFTS.find(function(s){ return (String(s.driver_id) === String(d.id) || String(s.rider_id) === String(d.id)) && s.date === DATA_DATE && s.status === 'active'; });
     if (!dShift) return '';
     var type = dShift.shift_type || '';
     return '<span class="sb' + (type==='PM'?' pm':'') + '">' + (type || '—') + '</span>';
