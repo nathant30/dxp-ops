@@ -406,7 +406,7 @@ svg{flex-shrink:0}
   padding:var(--s4);cursor:pointer;transition:all .15s;
 }
 .pcard:hover{border-color:var(--accent2);box-shadow:var(--sh-md)}
-.pcard-name{font-size:15px;font-weight:700;margin-bottom:4px}
+.pcard-name{font-size:15px;font-weight:800;font-family:var(--f-num);margin-bottom:4px}
 .pcard-health{display:flex;align-items:center;gap:6px;margin-bottom:10px}
 
 /* Filter bar */
@@ -5665,14 +5665,19 @@ function renderPodOverview() {
       const daysLeft = Math.max(0, 60 - daysIn);
       const capPct = Math.min(100, Math.round(daysIn/60*100));
       const capCol = daysLeft <= 10 ? 'var(--red)' : daysLeft <= 20 ? 'var(--amber)' : 'var(--green)';
+      const _r=14,_cx=16,_cy=16,_circ=2*Math.PI*_r;
+      const _dash=(capPct/100*_circ).toFixed(1);
       const captainBlock = cap
-        ? `<div style="margin-top:10px">
-            <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px">
-              <span style="color:var(--ink3)">👑 <b>${cap.name}</b></span>
-              <span style="color:${capCol};font-weight:600">Day ${daysIn} / 60${daysLeft<=10?' ⚠ rotate soon':''}</span>
-            </div>
-            <div style="height:3px;background:var(--border);border-radius:2px;overflow:hidden">
-              <div style="height:100%;width:${capPct}%;background:${capCol};border-radius:2px"></div>
+        ? `<div style="margin-top:10px;display:flex;align-items:center;gap:8px">
+            <svg width="32" height="32" viewBox="0 0 32 32" style="flex-shrink:0">
+              <circle cx="${_cx}" cy="${_cy}" r="${_r}" fill="none" stroke="var(--border)" stroke-width="3"/>
+              <circle cx="${_cx}" cy="${_cy}" r="${_r}" fill="none" stroke="${capCol}" stroke-width="3"
+                stroke-dasharray="${_dash} ${_circ.toFixed(1)}" stroke-linecap="round"
+                transform="rotate(-90 ${_cx} ${_cy})"/>
+            </svg>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:10px;font-weight:600;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">👑 ${cap.name}</div>
+              <div style="font-size:9px;color:${capCol}">Day ${daysIn}/60${daysLeft<=10?' · rotate soon':''}</div>
             </div>
           </div>`
         : `<div style="margin-top:10px"><button class="btn btn-s btn-xs" onclick="event.stopPropagation();showCaptainSuggestion('${p.id}')">Assign Captain →</button></div>`;
@@ -5681,7 +5686,7 @@ function renderPodOverview() {
         <!-- Header: name + status badge -->
         <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:8px">
           <div style="flex:1">
-            <div style="font-size:15px;font-weight:700">${p.name}</div>
+            <div style="font-size:15px;font-weight:800;font-family:var(--f-num)">${p.name}</div>
             ${varianceStr}
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
