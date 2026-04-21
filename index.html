@@ -934,7 +934,6 @@ function dxpSyncLoad() {
     CRASH_STORE = rows;
     saveCrashStore();
   });
-  console.log('DXP: Supabase sync complete');
 }
 
 function dxpSyncPod(podId) {
@@ -986,7 +985,6 @@ function dxpSyncLoadAll() {
     rows.forEach(function(row) {
       try { _lsSet(row.key, row.value); } catch(e) {}
     });
-    console.log('DXP: app_settings loaded (' + rows.length + ' keys)');
   });
 
   // 2. Load pods
@@ -2976,8 +2974,8 @@ function openServiceModal(section) {
       var compPct = demand > 0 ? Math.round(trips/demand*100) : 0;
       var unfulfilled = cancelled + expired;
       var unfulfilledPct = demand > 0 ? Math.round(unfulfilled/demand*100) : 0;
-      var queued = DB_QUEUED_NOW[s.id] || 0;
-      var inTrip = DB_IN_TRIP_NOW[s.id] || 0;
+      var queued = (DB_QUEUED_NOW  && DB_QUEUED_NOW[s.id])  || 0;
+      var inTrip = (DB_IN_TRIP_NOW && DB_IN_TRIP_NOW[s.id]) || 0;
       var compCol = compPct>=90?'#34D399':compPct>=75?'#f59e0b':'#ef4444';
       return ['<span style="font-size:14px;margin-right:6px">'+s.icon+'</span>'+s.label,
         demand.toLocaleString(),
@@ -2991,8 +2989,8 @@ function openServiceModal(section) {
     headerCols = ['Service', 'Queued Now', 'In Trip Now', 'Active Drivers', 'Total Active'];
     rowFn = function(s) {
       var d = DB_SERVICES[s.id] || {};
-      var queued = DB_QUEUED_NOW[s.id] || 0;
-      var inTrip = DB_IN_TRIP_NOW[s.id] || 0;
+      var queued = (DB_QUEUED_NOW  && DB_QUEUED_NOW[s.id])  || 0;
+      var inTrip = (DB_IN_TRIP_NOW && DB_IN_TRIP_NOW[s.id]) || 0;
       var drivers = Number(d.active_drivers||0);
       return ['<span style="font-size:14px;margin-right:6px">'+s.icon+'</span>'+s.label,
         '<span style="color:#C4B5FD">'+queued+'</span>',
