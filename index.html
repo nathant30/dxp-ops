@@ -2969,9 +2969,9 @@ function _renderFleetDirectory() {
   function tierBadge(d) {
     var rpd = d.rev_today || 0;
     if (rpd >= 3000) return '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--t-champion-b);color:var(--t-champion)">Champion</span>';
-    if (rpd >= 2001) return '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--t-pro-b);color:var(--t-pro)">Pro</span>';
-    if (rpd >= 1600) return '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--t-active-b);color:var(--t-active)">At Risk</span>';
-    if (rpd > 0)     return '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--t-standard-b);color:var(--t-standard)">Critical</span>';
+    if (rpd >= 2501) return '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--t-pro-b);color:var(--t-pro)">Pro</span>';
+    if (rpd >= 2001) return '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--t-active-b);color:var(--t-active)">Active</span>';
+    if (rpd >= 1600) return '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--t-standard-b);color:var(--t-standard)">Standard</span>';
     return '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--surface);color:var(--ink3)">Inactive</span>';
   }
   function sortArrow(c) {
