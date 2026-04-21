@@ -962,7 +962,10 @@ var _lsGet = lsGet;
 var _lsSet = lsSet;
 
 // Keys to keep LOCAL ONLY (sensitive / per-device)
-var SUPA_LOCAL_ONLY = ['dxpK', 'sched_pub_' + TODAY_PH, 'sched_shifts_' + TODAY_PH];
+var SUPA_LOCAL_ONLY = (function() {
+  var _t = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+  return ['dxpK', 'sched_pub_' + _t, 'sched_shifts_' + _t];
+})();
 
 function lsSet(key, val) {
   _lsSet(key, val); // always write local first (sync)
@@ -3715,7 +3718,7 @@ function buildSchedule() {
 
 function onSchedDateChange() {
   var di = document.getElementById('sched-date-input');
-  if(di) SCHED_DATE = di.value;
+  if(di) SCHED_DATE = di.value || TODAY_PH;
   SCHED_SHIFTS = lsGet('sched_shifts_'+SCHED_DATE,[]);
   SCHED_PUB = lsGet('sched_pub_'+SCHED_DATE,null);
   schedRenderBoard();
