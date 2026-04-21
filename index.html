@@ -180,13 +180,20 @@ svg{flex-shrink:0}
 .seg.ri{background:var(--amber-b);border-color:var(--amber-brd);} .seg.ri .seg-val{color:var(--amber);}
 .seg.cr{background:var(--red-b);border-color:var(--red-brd);} .seg.cr .seg-val{color:#991b1b;}
 
+/* Segments panel table */
+#cpanel-segments table{width:100%;border-collapse:collapse;flex:1;min-height:0;}
+#cpanel-segments thead th{padding:8px 12px;font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid var(--border);text-align:left;position:sticky;top:0;background:#fafbfc;z-index:1;}
+#cpanel-segments tbody td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle;font-size:12px;}
+#cpanel-segments tbody tr:hover{background:var(--surface);}
+.tbl-footer{padding:8px 12px;font-size:11px;color:var(--ink3);border-top:1px solid var(--border);flex-shrink:0;display:flex;gap:8px;align-items:center;background:#fafbfc;}
+
 /* Demand chart tab */
 .demand-wrap{padding:16px 20px;flex:1;display:flex;flex-direction:column;gap:12px;overflow:hidden;}
 .shift-toggle{display:flex;gap:2px;background:#f1f5f9;border-radius:6px;padding:2px;width:fit-content;}
 .shift-btn{font-size:10px;font-weight:600;padding:4px 14px;border-radius:4px;cursor:pointer;color:var(--ink3);border:none;background:none;}
 .shift-btn.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.1);}
 .chart-area{flex:1;position:relative;min-height:80px;}
-.bars-wrap{position:absolute;inset:0;display:flex;gap:4px;align-items:flex-end;padding-bottom:16px;}
+.bars-wrap{position:absolute;inset:0;display:flex;gap:4px;align-items:stretch;padding-bottom:16px;}
 .bcol{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;}
 .bstack{width:100%;display:flex;flex-direction:column;justify-content:flex-end;flex:1;gap:1px;background:#f1f5f9;border-radius:4px 4px 0 0;overflow:hidden;}
 .b-c{width:100%;background:#34d399;min-height:2px;}
@@ -2177,11 +2184,11 @@ function cmdSegmentsPanel() {
     var pct = tgtRpd > 0 ? Math.round(rpd / tgtRpd * 100) : 0;
     var barCol = rpd >= 3000 ? '#34d399' : rpd >= 2001 ? '#60a5fa' : rpd >= 1600 ? '#fbbf24' : '#f87171';
     return '<tr>'
-      + '<td style="font-weight:600;font-size:11px">' + (d.name || '—') + '</td>'
+      + '<td style="font-weight:600">' + (d.name || '—') + '</td>'
       + '<td>' + tierBadge(rpd) + '</td>'
       + '<td><span class="rev">\u20b1' + rpd.toLocaleString() + '</span></td>'
-      + '<td style="min-width:80px"><div class="pb"><div class="pf" style="width:' + Math.min(pct,100) + '%;background:' + barCol + '"></div></div></td>'
-      + '<td style="font-size:11px;color:#64748b">' + (d.trips_today || 0) + '</td>'
+      + '<td style="min-width:90px"><div class="pb"><div class="pf" style="width:' + Math.min(pct,100) + '%;background:' + barCol + '"></div></div></td>'
+      + '<td style="color:#64748b">' + (d.trips_today || 0) + '</td>'
       + '<td>' + shiftBadge(d) + '</td>'
       + '</tr>';
   }).join('');
@@ -2433,10 +2440,22 @@ function sparklineSVG(data, color) {
 function cmdPodsPanel() {
   var pods = window.PODS || {};
   var podIds = Object.keys(pods);
-  if (podIds.length === 0) {
-    return '<div style="padding:40px;text-align:center;font-size:12px;color:#94a3b8">No pods configured<br><span style="font-size:11px">Add pods in the Pods &amp; Captains section</span></div>';
-  }
   var taxiDrivers = D4W || [];
+  if (podIds.length === 0) {
+    if (taxiDrivers.length === 0) {
+      return '<div style="padding:40px;text-align:center;font-size:12px;color:#94a3b8">No pods configured<br><span style="font-size:11px">Add pods in the Pods &amp; Captains section</span></div>';
+    }
+    var sorted = taxiDrivers.slice().sort(function(a,b){ return (b.rpd||0)-(a.rpd||0); });
+    pods = {
+      'demo-a': { name:'Pod Makati Central', captain_name: sorted[0] ? sorted[0].name : 'Demo Captain', captain_start:'2026-01-15',
+        members: sorted.slice(0,5).map(function(d){ return String(d.id); }) },
+      'demo-b': { name:'Pod BGC North',      captain_name: sorted[5] ? sorted[5].name : 'Demo Captain', captain_start:'2026-02-01',
+        members: sorted.slice(5,10).map(function(d){ return String(d.id); }) },
+      'demo-c': { name:'Pod Pasig East',     captain_name: sorted[10] ? sorted[10].name : 'Demo Captain', captain_start:'2026-03-01',
+        members: sorted.slice(10,15).map(function(d){ return String(d.id); }) }
+    };
+    podIds = Object.keys(pods);
+  }
   var podRevTarget = typeof _perfCfg === 'function' ? _perfCfg('pod_rev_target', 2600) : 2600;
 
   var cards = podIds.map(function(pid) {
