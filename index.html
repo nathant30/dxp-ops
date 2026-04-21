@@ -7792,7 +7792,7 @@ function gateCheck() {
       document.getElementById('app').style.cssText = 'display:flex;flex-direction:column;height:100vh';
       if (typeof ph2RenderBanner === 'function') { try { ph2RenderBanner(); } catch(e) {} }
       setTimeout(dxpSyncLoadAll, 800);
-    setTimeout(dbRefreshAll, 1000);
+      setTimeout(dbRefreshAll, 1000);
     } else {
       setTimeout(function() {
         var gi = document.getElementById('gate-input');
