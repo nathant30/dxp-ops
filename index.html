@@ -63,6 +63,14 @@
   /* Bridge vars — removed in Task 12 dark-navy cleanup */
   --navy: #0a1628;
   --navy2: #112040;
+  /* Alias vars — used in JS-generated HTML */
+  --ink1: #0f172a;
+  --ink4: #94a3b8;
+  --text: #0f172a;
+  --text2: #334155;
+  --text3: #64748b;
+  --bg: #f7f9fb;
+  --rs: #f8fafc;
 }
 
 /* ─── RESET ─────────────────────────────────────────────────────────────── */
@@ -398,7 +406,7 @@ svg{flex-shrink:0}
   padding:var(--s4);cursor:pointer;transition:all .15s;
 }
 .pcard:hover{border-color:var(--accent2);box-shadow:var(--sh-md)}
-.pcard-name{font-size:15px;font-weight:700;margin-bottom:4px}
+.pcard-name{font-size:15px;font-weight:800;font-family:var(--f-num);margin-bottom:4px}
 .pcard-health{display:flex;align-items:center;gap:6px;margin-bottom:10px}
 
 /* Filter bar */
@@ -637,6 +645,15 @@ svg{flex-shrink:0}
 
 /* Quality pill */
 .sq-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:12px;font-size:10px;font-weight:700;border:1px solid}
+
+/* ─── SHARED DATA TABLE ─────────────────────────────────────────────────── */
+.data-table{width:100%;border-collapse:collapse;}
+.data-table thead th{padding:8px 12px;font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid var(--border);text-align:left;position:sticky;top:0;background:#fafbfc;z-index:1;}
+.data-table tbody td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle;font-size:12px;color:var(--ink2);}
+.data-table tbody tr:hover{background:var(--surface);}
+.data-table tbody tr:last-child td{border-bottom:none;}
+.data-table .col-num{text-align:right;font-family:var(--f-mono);}
+.data-table .col-badge{white-space:nowrap;}
 </style>
 <style></style>
 <style>
@@ -784,7 +801,7 @@ svg{flex-shrink:0}
             <div class="ph-sub" id="sched-board-sub-ph">—</div>
           </div>
           <div class="ph-actions">
-            <input type="date" id="sched-date-input" value="2026-04-10" onchange="onSchedDateChange()" style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;font-family:var(--f-mono);color:var(--ink);background:var(--surface)">
+            <input type="date" id="sched-date-input" value="" onchange="onSchedDateChange()" style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;font-family:var(--f-mono);color:var(--ink);background:var(--surface)">
             <div id="sched-quality-pill" class="sq-pill" style="background:var(--surface);border-color:var(--border);color:var(--ink3)">
               ★ <span id="sched-q-val">—</span>
             </div>
@@ -926,7 +943,6 @@ function dxpSyncLoad() {
     CRASH_STORE = rows;
     saveCrashStore();
   });
-  console.log('DXP: Supabase sync complete');
 }
 
 function dxpSyncPod(podId) {
@@ -954,7 +970,10 @@ var _lsGet = lsGet;
 var _lsSet = lsSet;
 
 // Keys to keep LOCAL ONLY (sensitive / per-device)
-var SUPA_LOCAL_ONLY = ['dxpK', 'sched_pub_2026-04-10', 'sched_shifts_2026-04-10'];
+var SUPA_LOCAL_ONLY = (function() {
+  var _t = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+  return ['dxpK', 'sched_pub_' + _t, 'sched_shifts_' + _t];
+})();
 
 function lsSet(key, val) {
   _lsSet(key, val); // always write local first (sync)
@@ -975,7 +994,6 @@ function dxpSyncLoadAll() {
     rows.forEach(function(row) {
       try { _lsSet(row.key, row.value); } catch(e) {}
     });
-    console.log('DXP: app_settings loaded (' + rows.length + ' keys)');
   });
 
   // 2. Load pods
@@ -2577,6 +2595,28 @@ function buildFleet() {
     return;
   }
 
+  // ── Tab bar: Supply | Directory ───────────────────────────────────────────
+  var tabBarHtml = '<div style="display:flex;gap:0;border-bottom:2px solid var(--border);background:var(--card);padding:0 24px">'
+    + ['supply','directory'].map(function(t) {
+        var labels = { supply:'Supply', directory:'Directory' };
+        var isOn = FLEET_TAB === t;
+        return '<button onclick="setFleetTab(\'' + t + '\')" style="padding:10px 18px;font-size:12px;font-weight:' + (isOn ? '700' : '500') + ';border:none;background:transparent;border-bottom:2px solid ' + (isOn ? 'var(--accent)' : 'transparent') + ';margin-bottom:-2px;cursor:pointer;color:' + (isOn ? 'var(--ink)' : 'var(--ink3)') + '">'
+          + labels[t] + '</button>';
+      }).join('')
+    + (FLEET_TAB === 'directory'
+        ? '<div style="margin-left:auto;display:flex;align-items:center;gap:6px;padding:6px 0">'
+          + '<input id="fleet-dir-search" placeholder="Search driver\u2026" oninput="fleetDirSearch()" value="' + FLEET_DIR_SEARCH + '" style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;color:var(--ink);background:var(--surface);width:200px">'
+          + '</div>'
+        : '')
+    + '</div>';
+
+  // If Directory tab selected, render directory and bail out
+  if (FLEET_TAB === 'directory') {
+    el.innerHTML = tabBarHtml + '<div id="fleet-dir-body"></div>';
+    _renderFleetDirectory();
+    return;
+  }
+
   // ── Constants ────────────────────────────────────────────────────────────
   var TAXI_TARGET  = 3000;
   var SHIFT_HRS    = 9;
@@ -2884,7 +2924,7 @@ function buildFleet() {
 
   html += '</div>'; // end directory
   html += '</div>'; // end wrapper
-  el.innerHTML = html;
+  el.innerHTML = tabBarHtml + html;
 }
 
 
@@ -2895,6 +2935,77 @@ function setFleetSort(col) {
   if (SORT.fleet.col === col) SORT.fleet.dir = SORT.fleet.dir === 'desc' ? 'asc' : 'desc';
   else { SORT.fleet.col = col; SORT.fleet.dir = 'desc'; }
   buildFleet();
+}
+
+var FLEET_TAB = 'supply';
+var FLEET_DIR_SEARCH = '';
+
+function setFleetTab(tab) {
+  FLEET_TAB = tab;
+  buildFleet();
+}
+
+function fleetDirSearch() {
+  FLEET_DIR_SEARCH = document.getElementById('fleet-dir-search') ? document.getElementById('fleet-dir-search').value : '';
+  _renderFleetDirectory();
+}
+
+function _renderFleetDirectory() {
+  var el = document.getElementById('fleet-dir-body');
+  if (!el) return;
+  var drivers = (DB_FLEET_HEALTH || []).slice();
+  if (FLEET_DIR_SEARCH) {
+    var q = FLEET_DIR_SEARCH.toLowerCase();
+    drivers = drivers.filter(function(d){ return d.name.toLowerCase().indexOf(q) !== -1; });
+  }
+  var col = SORT.fleet.col, dir = SORT.fleet.dir === 'desc' ? -1 : 1;
+  drivers.sort(function(a, b) {
+    if (col === 'name')  { return dir * (a.name || '').localeCompare(b.name || ''); }
+    if (col === 'trips') { return dir * ((a.trips_today || 0) - (b.trips_today || 0)); }
+    if (col === 'rpd')   { return dir * ((a.rev_today || 0) - (b.rev_today || 0)); }
+    return dir * ((a.rev_per_shift_hr || 0) - (b.rev_per_shift_hr || 0));
+  });
+  var svcLabels = { '16':'Taxi EV', '1':'Moto', '2':'GoCar', '3':'GoSUV', '10':'e-Trike' };
+  function tierBadge(d) {
+    var rpd = d.rev_today || 0;
+    if (rpd >= 3000) return '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--t-champion-b);color:var(--t-champion)">Champion</span>';
+    if (rpd >= 2501) return '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--t-pro-b);color:var(--t-pro)">Pro</span>';
+    if (rpd >= 2001) return '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--t-active-b);color:var(--t-active)">Active</span>';
+    if (rpd >= 1600) return '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--t-standard-b);color:var(--t-standard)">Standard</span>';
+    return '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--surface);color:var(--ink3)">Inactive</span>';
+  }
+  function sortArrow(c) {
+    if (SORT.fleet.col !== c) return '<span style="color:var(--border)"> \u21c5</span>';
+    return SORT.fleet.dir === 'desc' ? ' \u2193' : ' \u2191';
+  }
+  el.innerHTML = '<div style="padding:16px 24px">'
+    + '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
+    + '<table class="data-table">'
+    + '<thead><tr>'
+    + '<th onclick="setFleetSort(\'name\')" style="cursor:pointer">Driver' + sortArrow('name') + '</th>'
+    + '<th>Tier</th>'
+    + '<th>Service</th>'
+    + '<th onclick="setFleetSort(\'rpd\')" style="cursor:pointer;text-align:right">Rev Today' + sortArrow('rpd') + '</th>'
+    + '<th onclick="setFleetSort(\'trips\')" style="cursor:pointer;text-align:right">Trips' + sortArrow('trips') + '</th>'
+    + '<th onclick="setFleetSort(\'rph\')" style="cursor:pointer;text-align:right">Rev/hr' + sortArrow('rph') + '</th>'
+    + '</tr></thead>'
+    + '<tbody>'
+    + (drivers.length === 0
+        ? '<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--ink3)">No drivers match your search</td></tr>'
+        : drivers.map(function(d) {
+            return '<tr onclick="openDriverDrawer(\'' + d.id + '\')" style="cursor:pointer">'
+              + '<td><div style="font-weight:600">' + (d.name || d.id) + '</div><div style="font-size:10px;color:var(--ink3)">' + (d.days_active || 0) + 'd active</div></td>'
+              + '<td>' + tierBadge(d) + '</td>'
+              + '<td style="font-size:11px;color:var(--ink3)">' + (svcLabels[d.vtid] || d.vtid || '\u2014') + '</td>'
+              + '<td class="col-num">' + (d.rev_today > 0 ? '\u20b1' + (d.rev_today || 0).toLocaleString() : '\u2014') + '</td>'
+              + '<td class="col-num">' + (d.trips_today || '\u2014') + '</td>'
+              + '<td class="col-num">' + (d.rev_per_shift_hr > 0 ? '\u20b1' + d.rev_per_shift_hr + '/hr' : '\u2014') + '</td>'
+              + '</tr>';
+          }).join('')
+      )
+    + '</tbody></table>'
+    + (drivers.length > 0 ? '<div style="padding:8px 12px;font-size:11px;color:var(--ink3);border-top:1px solid var(--border)">' + drivers.length + ' drivers</div>' : '')
+    + '</div></div>';
 }
 
 
@@ -2965,8 +3076,8 @@ function openServiceModal(section) {
       var compPct = demand > 0 ? Math.round(trips/demand*100) : 0;
       var unfulfilled = cancelled + expired;
       var unfulfilledPct = demand > 0 ? Math.round(unfulfilled/demand*100) : 0;
-      var queued = DB_QUEUED_NOW[s.id] || 0;
-      var inTrip = DB_IN_TRIP_NOW[s.id] || 0;
+      var queued = (DB_QUEUED_NOW  && DB_QUEUED_NOW[s.id])  || 0;
+      var inTrip = (DB_IN_TRIP_NOW && DB_IN_TRIP_NOW[s.id]) || 0;
       var compCol = compPct>=90?'#34D399':compPct>=75?'#f59e0b':'#ef4444';
       return ['<span style="font-size:14px;margin-right:6px">'+s.icon+'</span>'+s.label,
         demand.toLocaleString(),
@@ -2980,8 +3091,8 @@ function openServiceModal(section) {
     headerCols = ['Service', 'Queued Now', 'In Trip Now', 'Active Drivers', 'Total Active'];
     rowFn = function(s) {
       var d = DB_SERVICES[s.id] || {};
-      var queued = DB_QUEUED_NOW[s.id] || 0;
-      var inTrip = DB_IN_TRIP_NOW[s.id] || 0;
+      var queued = (DB_QUEUED_NOW  && DB_QUEUED_NOW[s.id])  || 0;
+      var inTrip = (DB_IN_TRIP_NOW && DB_IN_TRIP_NOW[s.id]) || 0;
       var drivers = Number(d.active_drivers||0);
       return ['<span style="font-size:14px;margin-right:6px">'+s.icon+'</span>'+s.label,
         '<span style="color:#C4B5FD">'+queued+'</span>',
@@ -3218,14 +3329,69 @@ function buildAssets() {
   }
 
   function renderMaintenance() {
+    var now = new Date(TODAY_PH);
+    var alerts = ASSETS.map(function(a) {
+      var orcrD = a.orcr_exp ? Math.ceil((new Date(a.orcr_exp) - now) / 86400000) : 9999;
+      var insD  = a.ins_exp  ? Math.ceil((new Date(a.ins_exp)  - now) / 86400000) : 9999;
+      var ltfrbOk = a.ltfrb === 'valid';
+      var hasAlert = orcrD <= 30 || insD <= 30 || !ltfrbOk;
+      return { a:a, orcrD:orcrD, insD:insD, ltfrbOk:ltfrbOk, hasAlert:hasAlert,
+               soonest: Math.min(orcrD, insD, ltfrbOk ? 9999 : 0) };
+    }).filter(function(r){ return r.hasAlert; })
+      .sort(function(a, b){ return a.soonest - b.soonest; });
+
+    function alertLevel(days) {
+      if (days <= 7)  return { col:'var(--red)',   bg:'var(--red-b)',   label:'Critical' };
+      if (days <= 30) return { col:'var(--amber)',  bg:'var(--amber-b)', label:'Warning'  };
+      return                  { col:'var(--ink3)', bg:'var(--surface)', label:'OK'        };
+    }
+    function daysLabel(d) {
+      if (d >= 9999) return '—';
+      if (d < 0) return '<span style="color:var(--red);font-weight:700">EXPIRED</span>';
+      return d + 'd';
+    }
+
+    var tableRows = alerts.map(function(r) {
+      var lvl = alertLevel(r.soonest);
+      return '<tr style="background:' + lvl.bg + ';border-bottom:1px solid var(--border)">'
+        + '<td style="padding:10px 14px;font-family:var(--f-mono);font-weight:700;font-size:12px">' + r.a.plate + '</td>'
+        + '<td style="padding:10px 14px;font-size:12px">' + (r.a.orcr_exp || '—') + ' <span style="font-size:10px;color:' + alertLevel(r.orcrD).col + '">(' + daysLabel(r.orcrD) + ')</span></td>'
+        + '<td style="padding:10px 14px;font-size:12px">' + (r.a.ins_exp  || '—') + ' <span style="font-size:10px;color:' + alertLevel(r.insD).col  + '">(' + daysLabel(r.insD)  + ')</span></td>'
+        + '<td style="padding:10px 14px;font-size:12px">'
+          + (r.ltfrbOk
+              ? '<span style="color:var(--green);font-size:11px">✓ Valid</span>'
+              : '<span style="color:var(--red);font-weight:700;font-size:11px">⚠ Invalid</span>')
+          + '</td>'
+        + '<td style="padding:10px 14px"><span style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;background:' + lvl.col + ';color:#fff">' + lvl.label + '</span></td>'
+        + '<td style="padding:10px 14px"><button class="btn btn-s btn-xs" onclick="openAssetDrawer(\'' + r.a.asset_id + '\')">View →</button></td>'
+        + '</tr>';
+    }).join('');
+
     return '<div style="padding:var(--s4)">'
-      +'<div style="font-size:14px;font-weight:700;margin-bottom:4px">Maintenance &amp; Downtime</div>'
-      +'<div style="font-size:11px;color:var(--ink3);margin-bottom:16px">PMS schedule \u00b7 crash tracking \u00b7 repair status</div>'
-      +'<div style="padding:40px;text-align:center;background:var(--card);border:1px solid var(--border);border-radius:var(--rl)">'
-      +'<div style="font-size:32px;margin-bottom:12px">\ud83d\udd27</div>'
-      +'<div style="font-size:14px;font-weight:700;margin-bottom:6px">Maintenance tracking coming soon</div>'
-      +'<div style="font-size:12px;color:var(--ink3);max-width:360px;margin:0 auto;line-height:1.6">PMS schedules, crash reports, and repair status logs will appear here once the maintenance data source is connected.</div>'
-      +'</div></div>';
+      + '<div class="ph" style="margin:-20px -0px 16px;padding:16px 20px">'
+      + '<div class="ph-left"><div class="ph-title" style="font-size:16px">Compliance Alerts</div>'
+      + '<div class="ph-sub">' + alerts.length + ' assets need attention · sorted by soonest expiry</div></div>'
+      + '</div>'
+      + (alerts.length === 0
+          ? '<div style="padding:40px;text-align:center;background:var(--card);border:1px solid var(--border);border-radius:var(--rl)">'
+            + '<div style="font-size:32px;margin-bottom:8px">✅</div>'
+            + '<div style="font-size:14px;font-weight:700;margin-bottom:4px">All assets compliant</div>'
+            + '<div style="font-size:11px;color:var(--ink3)">No ORCR, insurance, or LTFRB issues within 30 days</div>'
+            + '</div>'
+          : '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">'
+            + '<table class="data-table">'
+            + '<thead><tr>'
+            + '<th>Plate</th><th>ORCR Expiry</th><th>Insurance Expiry</th><th>LTFRB</th><th>Level</th><th></th>'
+            + '</tr></thead>'
+            + '<tbody>' + tableRows + '</tbody>'
+            + '</table>'
+            + '<div style="padding:8px 14px;font-size:11px;color:var(--ink3);border-top:1px solid var(--border)">'
+            + '<span style="color:var(--red)">■</span> &lt;7 days = Critical &nbsp;'
+            + '<span style="color:var(--amber)">■</span> 7–30 days = Warning'
+            + '</div>'
+            + '</div>'
+        )
+      + '</div>';
   }
 
   function renderOverview() {
@@ -3337,7 +3503,7 @@ function filterAssets2() {
 
 function hasComplianceAlert(a) {
   if (!a) return false;
-  const now = new Date('2026-04-09');
+  const now = new Date(TODAY_PH);
   const orcrD = Math.ceil((new Date(a.orcr_exp) - now) / 86400000);
   const insD = Math.ceil((new Date(a.ins_exp) - now) / 86400000);
   return orcrD <= 30 || insD <= 30 || a.ltfrb !== 'valid';
@@ -3409,7 +3575,7 @@ function renderAssetDrawerContent(a, tab) {
       ${!crashes.length ? '<div class="empty"><div class="empty-icon">✅</div><div class="empty-title">No crashes recorded</div></div>'
       : `<div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden"><table class="tbl"><thead><tr><th>Date</th><th>Driver</th><th>Fault</th><th>Status</th><th style="text-align:right">Penalty</th></tr></thead><tbody>${crashes.map(c => `<tr><td class="mono" style="font-size:10px;color:var(--ink3)">${(c.reportedAt||'—').slice(5,10)}</td><td style="font-size:11px">${c.driverName}</td><td style="font-size:10px;color:${c.fault==='at_fault'?'var(--red)':'var(--green)'}">${c.fault==='at_fault'?'At Fault':'No Fault'}</td><td><span class="badge ${c.status==='open'?'badge-red':'badge-green'}">${c.status}</span></td><td class="mono" style="text-align:right;color:var(--red)">${c.penaltyAmt?fP(c.penaltyAmt):'—'}</td></tr>`).join('')}</tbody></table></div>`}`;
   } else if (tab === 'compliance') {
-    const now = new Date('2026-04-09');
+    const now = new Date(TODAY_PH);
     const orcrD = Math.ceil((new Date(a.orcr_exp) - now) / 86400000);
     const insD = Math.ceil((new Date(a.ins_exp) - now) / 86400000);
     body = `<div class="card" style="margin-bottom:12px">
@@ -3496,7 +3662,7 @@ var SCHED_TEMPLATES=lsGet('sched_templates',[
   {id:'T_DELTA',name:'Delta',nick:'Evening', startH:15,endH:23,targetRev:3000,priority:'peak',  col:'#D97706',note:'Highest demand — ₱11,464 fleet rev at 21:00'},
   {id:'T_ECHO',name:'Echo',nick:'Split',     startH:6, endH:14,targetRev:2000,priority:'normal',col:'#DB2777',note:'Early shoulder + midday'},
 ]);
-var SCHED_SHIFTS=lsGet('sched_shifts_2026-04-10',[]);
+var SCHED_SHIFTS=lsGet('sched_shifts_'+TODAY_PH,[]);
 var SCHED_BLOCKS=lsGet('sched_blocks',[]);
 var SCHED_CFG=lsGet('sched_cfg',{
   maxShiftH:10, minRestH:8, swapCutoffH:12,
@@ -3504,10 +3670,10 @@ var SCHED_CFG=lsGet('sched_cfg',{
   requireHandover:true, autoAssign:false,
   weights:{overtime:25,revFit:30,fairness:20,peakCov:15,handover:10},
 });
-var SCHED_DATE='2026-04-10';
+var SCHED_DATE=TODAY_PH;
 var SCHED_FILTER='all';
 var SCHED_SEL=null; // selected cell {vehicleId, templateId}
-var SCHED_PUB=lsGet('sched_pub_2026-04-10',null);
+var SCHED_PUB=lsGet('sched_pub_'+TODAY_PH,null);
 var SCHED_CUR_TAB='board';
 
 function schedSaveTemplates(){lsSet('sched_templates',SCHED_TEMPLATES);}
@@ -3695,9 +3861,14 @@ function goSchedTab(tab, el) {
 
 function buildSchedule() {
   var di = document.getElementById('sched-date-input');
-  if(di) SCHED_DATE = di.value || '2026-04-10';
+  if(di && !di.value) di.value = TODAY_PH;
+  if(di) SCHED_DATE = di.value || TODAY_PH;
   SCHED_SHIFTS = lsGet('sched_shifts_'+SCHED_DATE,[]);
   SCHED_PUB = lsGet('sched_pub_'+SCHED_DATE,null);
+  // Update page header subtitle
+  var schedSub = document.getElementById('sched-board-sub-ph');
+  if (schedSub) schedSub.textContent = SCHED_DATE + ' · ' + SCHED_SHIFTS.length + ' shifts assigned'
+    + (SCHED_PUB ? ' · ✓ Published' : '');
   // activate current tab
   var curPill = document.getElementById('stab-'+SCHED_CUR_TAB);
   goSchedTab(SCHED_CUR_TAB, curPill);
@@ -3706,7 +3877,7 @@ function buildSchedule() {
 
 function onSchedDateChange() {
   var di = document.getElementById('sched-date-input');
-  if(di) SCHED_DATE = di.value;
+  if(di) SCHED_DATE = di.value || TODAY_PH;
   SCHED_SHIFTS = lsGet('sched_shifts_'+SCHED_DATE,[]);
   SCHED_PUB = lsGet('sched_pub_'+SCHED_DATE,null);
   schedRenderBoard();
@@ -4267,7 +4438,7 @@ function schedSaveCfgForm(){
 const _exp = {
   gTier, gBonus, gScore, getAssetTarget, refreshLiveData, goS, toast, openModal,
   buildFinance, finTab, finToggleBase, finShowCyclePicker, finOpenPayslip, finExportCSV, finPrintPayslip,
-  buildSimulator, simSelectDriver, setFleetSort, _confirmRemoveFromPod, _doDeleteTemplate,
+  buildSimulator, simSelectDriver, setFleetSort, setFleetTab, fleetDirSearch, _confirmRemoveFromPod, _doDeleteTemplate,
   closeModal, openDrawer, closeDrawer, updateAlertStrip, dismissAlert, updateTopbar, updateAgeBadge, doRefresh,
   buildCmd, buildFleet, openDriverDrawer, buildAssets, setAssetFilter,
   filterAssets2, renderAssetGrid2, hasComplianceAlert, openAssetDrawer, renderAssetDrawerContent, switchAssetDrawerTab, showNewAsset, showReportCrash,
@@ -4405,7 +4576,7 @@ function renderAssetGrid2() {
           const pct = target > 0 ? Math.min(100, Math.round(rev / target * 100)) : 0;
           const barCol = pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--amber)' : 'var(--red)';
           const active = assetActiveShift(a.asset_id);
-          const orcr = new Date(a.orcr_exp), ins = new Date(a.ins_exp), now = new Date('2026-04-09');
+          const orcr = new Date(a.orcr_exp), ins = new Date(a.ins_exp), now = new Date(TODAY_PH);
           const orcrD = Math.ceil((orcr - now) / 86400000), insD = Math.ceil((ins - now) / 86400000);
           const compBad = orcrD <= 30 || insD <= 30 || a.ltfrb !== 'valid';
           const sdot = {active:'var(--green)',idle:'var(--amber)',maintenance:'#6366F1',offline:'var(--ink3)'}[a.status]||'var(--ink3)';
@@ -5494,14 +5665,19 @@ function renderPodOverview() {
       const daysLeft = Math.max(0, 60 - daysIn);
       const capPct = Math.min(100, Math.round(daysIn/60*100));
       const capCol = daysLeft <= 10 ? 'var(--red)' : daysLeft <= 20 ? 'var(--amber)' : 'var(--green)';
+      const _r=14,_cx=16,_cy=16,_circ=2*Math.PI*_r;
+      const _dash=(capPct/100*_circ).toFixed(1);
       const captainBlock = cap
-        ? `<div style="margin-top:10px">
-            <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px">
-              <span style="color:var(--ink3)">👑 <b>${cap.name}</b></span>
-              <span style="color:${capCol};font-weight:600">Day ${daysIn} / 60${daysLeft<=10?' ⚠ rotate soon':''}</span>
-            </div>
-            <div style="height:3px;background:var(--border);border-radius:2px;overflow:hidden">
-              <div style="height:100%;width:${capPct}%;background:${capCol};border-radius:2px"></div>
+        ? `<div style="margin-top:10px;display:flex;align-items:center;gap:8px">
+            <svg width="32" height="32" viewBox="0 0 32 32" style="flex-shrink:0">
+              <circle cx="${_cx}" cy="${_cy}" r="${_r}" fill="none" stroke="var(--border)" stroke-width="3"/>
+              <circle cx="${_cx}" cy="${_cy}" r="${_r}" fill="none" stroke="${capCol}" stroke-width="3"
+                stroke-dasharray="${_dash} ${_circ.toFixed(1)}" stroke-linecap="round"
+                transform="rotate(-90 ${_cx} ${_cy})"/>
+            </svg>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:10px;font-weight:600;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">👑 ${cap.name}</div>
+              <div style="font-size:9px;color:${capCol}">Day ${daysIn}/60${daysLeft<=10?' · rotate soon':''}</div>
             </div>
           </div>`
         : `<div style="margin-top:10px"><button class="btn btn-s btn-xs" onclick="event.stopPropagation();showCaptainSuggestion('${p.id}')">Assign Captain →</button></div>`;
@@ -5510,7 +5686,7 @@ function renderPodOverview() {
         <!-- Header: name + status badge -->
         <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:8px">
           <div style="flex:1">
-            <div style="font-size:15px;font-weight:700">${p.name}</div>
+            <div style="font-size:15px;font-weight:800;font-family:var(--f-num)">${p.name}</div>
             ${varianceStr}
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
@@ -6929,6 +7105,8 @@ function calcDriverPay(d) {
 function renderFinOverview() {
   const body = document.getElementById('fin-body');
   const drivers = ALL_DRIVERS || D4W;
+  const finSubEl = document.getElementById('fin-sub');
+  if (finSubEl) finSubEl.textContent = 'Pay cycle: ' + FIN_CYCLE.label + ' · ' + (drivers || []).length + ' drivers';
   if (!drivers || drivers.length === 0) {
     body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--ink3)"><div style="font-size:32px;margin-bottom:12px">📭</div><div style="font-size:14px;font-weight:600;margin-bottom:6px">No Driver Data Available</div><div style="font-size:11px">Ensure REAL_TODAY_SHIFTS is populated or connect to the live Databricks API.</div></div>';
     return;
@@ -6965,7 +7143,7 @@ function renderFinOverview() {
     ].filter(Boolean).map(([label,val,sub,col]) => `
       <div class="stat" style="flex:1">
         <div class="stat-label">${label}</div>
-        <div class="stat-val" style="font-size:20px">${val}</div>
+        <div class="stat-val" style="font-size:22px;font-family:var(--f-num)">${val}</div>
         <div class="stat-sub">${sub}</div>
         <div class="stat-accent" style="background:var(--${col==='blue'?'accent':col==='red'?'red':col==='green'?'green':'amber'})"></div>
       </div>`).join('')}
@@ -8293,7 +8471,13 @@ function buildPerformance() {
       } else {
         statusHtml = '<span style="font-size:11px;color:var(--muted)">' + d.trips_today + ' trips</span>';
       }
-      return '<tr style="border-bottom:1px solid var(--border);background:' + (i % 2 ? 'var(--surface)' : 'transparent') + '">'
+      var rankMedals = ['🥇','🥈','🥉'];
+      var rankBorder = i < 3 ? 'border-left:3px solid ' + (['#F59E0B','#94A3B8','#CD7F32'][i]) + ';' : '';
+      var rankCell = '<td style="padding:8px 12px;text-align:center;font-size:12px;font-weight:700;color:var(--ink3)">'
+        + (i < 3 ? rankMedals[i] : '<span style="color:var(--border)">' + (i+1) + '</span>')
+        + '</td>';
+      return '<tr style="border-bottom:1px solid var(--border);background:' + (i % 2 ? 'var(--surface)' : 'transparent') + ';' + rankBorder + '">'
+        + rankCell
         + '<td style="padding:8px 12px;white-space:nowrap"><span style="font-size:12px;font-weight:500">' + (d.name || d.id) + '</span></td>'
         + '<td style="padding:8px 12px;white-space:nowrap;font-size:12px">' + svcLabel + '</td>'
         + '<td style="padding:8px 12px;white-space:nowrap;font-size:12px;color:var(--muted)">' + row.shift + '</td>'
@@ -8306,7 +8490,7 @@ function buildPerformance() {
     driverContent = (activeFleet.length === 0
       ? '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No active drivers</div>'
       : '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
-        + '<thead><tr>' + _sTh('Driver','name') + _sTh('Service','svc') + _sTh('Shift','shift') + _sTh('Trips','trips') + _sTh('Pace/hr','pace') + _sTh('Projected','proj') + _sTh('Status','status') + '</tr></thead>'
+        + '<thead><tr><th style="padding:8px 12px;font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);width:40px">#</th>' + _sTh('Driver','name') + _sTh('Service','svc') + _sTh('Shift','shift') + _sTh('Trips','trips') + _sTh('Pace/hr','pace') + _sTh('Projected','proj') + _sTh('Status','status') + '</tr></thead>'
         + '<tbody>' + tableRows.join('') + '</tbody>'
         + '</table></div>')
       + (hasMore ? '<div style="padding:8px 14px;text-align:center;border-top:1px solid var(--border)">'
