@@ -145,6 +145,10 @@ svg{flex-shrink:0}
 .ctab.on{color:var(--ink);font-weight:700;border-bottom-color:var(--accent);}
 .ctab .cnt{font-size:10px;font-weight:700;background:#f1f5f9;color:var(--ink3);padding:1px 7px;border-radius:10px;}
 .ctab.on .cnt{background:#eff6ff;color:var(--accent);}
+.card-tabs-period{margin-left:auto;display:flex;align-items:center;gap:4px;padding:6px 0;}
+.period-btn{font-size:10px;font-weight:600;padding:4px 10px;border-radius:6px;cursor:pointer;color:var(--ink3);border:1px solid var(--border);background:var(--card);white-space:nowrap;}
+.period-btn.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+.period-btn:hover:not(.on){background:var(--surface);}
 .cpanel{display:none;flex:1;overflow:auto;flex-direction:column;}
 .cpanel.on{display:flex;}
 
@@ -2033,6 +2037,7 @@ function buildCmd() {
 
   if (cmdMapObj) { try { cmdMapObj.remove(); } catch(e) {} cmdMapObj = null; }
   cmdMapReady = false;
+  var _pdm = window.CMD_DATE_MODE || 'today';
   el.innerHTML = '<div class="main-card">'
     + '<div class="card-tabs">'
     + '<button class="ctab' + (CMD_TAB==='fleet'     ? ' on' : '') + '" onclick="cmdSwitchTab(\'fleet\',this)">'
@@ -2045,6 +2050,12 @@ function buildCmd() {
     +   '\uD83D\uDDFA City Heatmap</button>'
     + '<button class="ctab' + (CMD_TAB==='pods'      ? ' on' : '') + '" onclick="cmdSwitchTab(\'pods\',this)">'
     +   '\u2B21 Pods <span class="cnt">' + podTotal + '</span></button>'
+    + '<div class="card-tabs-period">'
+    + ['today','yesterday','mtd'].map(function(m){
+        var lbl={today:'Today',yesterday:'Yesterday',mtd:'Month to Date'}[m];
+        return '<button class="period-btn'+(_pdm===m?' on':'')+'" onclick="setCmdPeriodAndRefresh(\''+m+'\')">'+lbl+'</button>';
+      }).join('')
+    + '</div>'
     + '</div>'
     + '<div class="cpanel' + (CMD_TAB==='fleet'     ? ' on' : '') + '" id="cpanel-fleet">'     + cmdFleetPanel()    + '</div>'
     + '<div class="cpanel' + (CMD_TAB==='segments'  ? ' on' : '') + '" id="cpanel-segments">'  + cmdSegmentsPanel() + '</div>'
@@ -5110,16 +5121,7 @@ function _injectCmdExtras() {
   if (!el) return;
   var crashes = buildCrashList();
   var openCrashes = crashes.filter(function(c) { return c.status === 'open'; });
-  // Add UE + crash report buttons
-  var btnBar = document.createElement('div');
-  btnBar.style.cssText = 'display:flex;gap:6px;justify-content:flex-end;margin-bottom:12px';
   if (!window.CMD_DATE_MODE) window.CMD_DATE_MODE = 'today';
-  btnBar.innerHTML = ['today','yesterday','mtd'].map(function(m){
-    var labels={today:'Today',yesterday:'Yesterday',mtd:'Month to Date'};
-    var isOn=window.CMD_DATE_MODE===m;
-    return '<button class="btn btn-s btn-xs" onclick="setCmdPeriodAndRefresh(\''+m+'\')" style="'+(isOn?'background:var(--accent);color:#fff;border-color:var(--accent)':'')+'">'+labels[m]+'</button>';
-  }).join('');
-  el.insertBefore(btnBar, el.firstChild);
   // Show open crashes if any
   if (openCrashes.length) {
     var crashDiv = document.createElement('div');
