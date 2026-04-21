@@ -7105,6 +7105,8 @@ function calcDriverPay(d) {
 function renderFinOverview() {
   const body = document.getElementById('fin-body');
   const drivers = ALL_DRIVERS || D4W;
+  const finSubEl = document.getElementById('fin-sub');
+  if (finSubEl) finSubEl.textContent = 'Pay cycle: ' + FIN_CYCLE.label + ' · ' + (drivers || []).length + ' drivers';
   if (!drivers || drivers.length === 0) {
     body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--ink3)"><div style="font-size:32px;margin-bottom:12px">📭</div><div style="font-size:14px;font-weight:600;margin-bottom:6px">No Driver Data Available</div><div style="font-size:11px">Ensure REAL_TODAY_SHIFTS is populated or connect to the live Databricks API.</div></div>';
     return;
@@ -7141,7 +7143,7 @@ function renderFinOverview() {
     ].filter(Boolean).map(([label,val,sub,col]) => `
       <div class="stat" style="flex:1">
         <div class="stat-label">${label}</div>
-        <div class="stat-val" style="font-size:20px">${val}</div>
+        <div class="stat-val" style="font-size:22px;font-family:var(--f-num)">${val}</div>
         <div class="stat-sub">${sub}</div>
         <div class="stat-accent" style="background:var(--${col==='blue'?'accent':col==='red'?'red':col==='green'?'green':'amber'})"></div>
       </div>`).join('')}
