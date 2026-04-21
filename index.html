@@ -63,6 +63,14 @@
   /* Bridge vars — removed in Task 12 dark-navy cleanup */
   --navy: #0a1628;
   --navy2: #112040;
+  /* Alias vars — used in JS-generated HTML */
+  --ink1: #0f172a;
+  --ink4: #94a3b8;
+  --text: #0f172a;
+  --text2: #334155;
+  --text3: #64748b;
+  --bg: #f7f9fb;
+  --rs: #f8fafc;
 }
 
 /* ─── RESET ─────────────────────────────────────────────────────────────── */
@@ -784,7 +792,7 @@ svg{flex-shrink:0}
             <div class="ph-sub" id="sched-board-sub-ph">—</div>
           </div>
           <div class="ph-actions">
-            <input type="date" id="sched-date-input" value="2026-04-10" onchange="onSchedDateChange()" style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;font-family:var(--f-mono);color:var(--ink);background:var(--surface)">
+            <input type="date" id="sched-date-input" value="" onchange="onSchedDateChange()" style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;font-family:var(--f-mono);color:var(--ink);background:var(--surface)">
             <div id="sched-quality-pill" class="sq-pill" style="background:var(--surface);border-color:var(--border);color:var(--ink3)">
               ★ <span id="sched-q-val">—</span>
             </div>
@@ -954,7 +962,7 @@ var _lsGet = lsGet;
 var _lsSet = lsSet;
 
 // Keys to keep LOCAL ONLY (sensitive / per-device)
-var SUPA_LOCAL_ONLY = ['dxpK', 'sched_pub_2026-04-10', 'sched_shifts_2026-04-10'];
+var SUPA_LOCAL_ONLY = ['dxpK', 'sched_pub_' + TODAY_PH, 'sched_shifts_' + TODAY_PH];
 
 function lsSet(key, val) {
   _lsSet(key, val); // always write local first (sync)
@@ -3337,7 +3345,7 @@ function filterAssets2() {
 
 function hasComplianceAlert(a) {
   if (!a) return false;
-  const now = new Date('2026-04-09');
+  const now = new Date(TODAY_PH);
   const orcrD = Math.ceil((new Date(a.orcr_exp) - now) / 86400000);
   const insD = Math.ceil((new Date(a.ins_exp) - now) / 86400000);
   return orcrD <= 30 || insD <= 30 || a.ltfrb !== 'valid';
@@ -3409,7 +3417,7 @@ function renderAssetDrawerContent(a, tab) {
       ${!crashes.length ? '<div class="empty"><div class="empty-icon">✅</div><div class="empty-title">No crashes recorded</div></div>'
       : `<div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden"><table class="tbl"><thead><tr><th>Date</th><th>Driver</th><th>Fault</th><th>Status</th><th style="text-align:right">Penalty</th></tr></thead><tbody>${crashes.map(c => `<tr><td class="mono" style="font-size:10px;color:var(--ink3)">${(c.reportedAt||'—').slice(5,10)}</td><td style="font-size:11px">${c.driverName}</td><td style="font-size:10px;color:${c.fault==='at_fault'?'var(--red)':'var(--green)'}">${c.fault==='at_fault'?'At Fault':'No Fault'}</td><td><span class="badge ${c.status==='open'?'badge-red':'badge-green'}">${c.status}</span></td><td class="mono" style="text-align:right;color:var(--red)">${c.penaltyAmt?fP(c.penaltyAmt):'—'}</td></tr>`).join('')}</tbody></table></div>`}`;
   } else if (tab === 'compliance') {
-    const now = new Date('2026-04-09');
+    const now = new Date(TODAY_PH);
     const orcrD = Math.ceil((new Date(a.orcr_exp) - now) / 86400000);
     const insD = Math.ceil((new Date(a.ins_exp) - now) / 86400000);
     body = `<div class="card" style="margin-bottom:12px">
@@ -3496,7 +3504,7 @@ var SCHED_TEMPLATES=lsGet('sched_templates',[
   {id:'T_DELTA',name:'Delta',nick:'Evening', startH:15,endH:23,targetRev:3000,priority:'peak',  col:'#D97706',note:'Highest demand — ₱11,464 fleet rev at 21:00'},
   {id:'T_ECHO',name:'Echo',nick:'Split',     startH:6, endH:14,targetRev:2000,priority:'normal',col:'#DB2777',note:'Early shoulder + midday'},
 ]);
-var SCHED_SHIFTS=lsGet('sched_shifts_2026-04-10',[]);
+var SCHED_SHIFTS=lsGet('sched_shifts_'+TODAY_PH,[]);
 var SCHED_BLOCKS=lsGet('sched_blocks',[]);
 var SCHED_CFG=lsGet('sched_cfg',{
   maxShiftH:10, minRestH:8, swapCutoffH:12,
@@ -3504,10 +3512,10 @@ var SCHED_CFG=lsGet('sched_cfg',{
   requireHandover:true, autoAssign:false,
   weights:{overtime:25,revFit:30,fairness:20,peakCov:15,handover:10},
 });
-var SCHED_DATE='2026-04-10';
+var SCHED_DATE=TODAY_PH;
 var SCHED_FILTER='all';
 var SCHED_SEL=null; // selected cell {vehicleId, templateId}
-var SCHED_PUB=lsGet('sched_pub_2026-04-10',null);
+var SCHED_PUB=lsGet('sched_pub_'+TODAY_PH,null);
 var SCHED_CUR_TAB='board';
 
 function schedSaveTemplates(){lsSet('sched_templates',SCHED_TEMPLATES);}
@@ -3695,7 +3703,8 @@ function goSchedTab(tab, el) {
 
 function buildSchedule() {
   var di = document.getElementById('sched-date-input');
-  if(di) SCHED_DATE = di.value || '2026-04-10';
+  if(di && !di.value) di.value = TODAY_PH;
+  if(di) SCHED_DATE = di.value || TODAY_PH;
   SCHED_SHIFTS = lsGet('sched_shifts_'+SCHED_DATE,[]);
   SCHED_PUB = lsGet('sched_pub_'+SCHED_DATE,null);
   // activate current tab
@@ -4405,7 +4414,7 @@ function renderAssetGrid2() {
           const pct = target > 0 ? Math.min(100, Math.round(rev / target * 100)) : 0;
           const barCol = pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--amber)' : 'var(--red)';
           const active = assetActiveShift(a.asset_id);
-          const orcr = new Date(a.orcr_exp), ins = new Date(a.ins_exp), now = new Date('2026-04-09');
+          const orcr = new Date(a.orcr_exp), ins = new Date(a.ins_exp), now = new Date(TODAY_PH);
           const orcrD = Math.ceil((orcr - now) / 86400000), insD = Math.ceil((ins - now) / 86400000);
           const compBad = orcrD <= 30 || insD <= 30 || a.ltfrb !== 'valid';
           const sdot = {active:'var(--green)',idle:'var(--amber)',maintenance:'#6366F1',offline:'var(--ink3)'}[a.status]||'var(--ink3)';
