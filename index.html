@@ -8471,7 +8471,13 @@ function buildPerformance() {
       } else {
         statusHtml = '<span style="font-size:11px;color:var(--muted)">' + d.trips_today + ' trips</span>';
       }
-      return '<tr style="border-bottom:1px solid var(--border);background:' + (i % 2 ? 'var(--surface)' : 'transparent') + '">'
+      var rankMedals = ['🥇','🥈','🥉'];
+      var rankBorder = i < 3 ? 'border-left:3px solid ' + (['#F59E0B','#94A3B8','#CD7F32'][i]) + ';' : '';
+      var rankCell = '<td style="padding:8px 12px;text-align:center;font-size:12px;font-weight:700;color:var(--ink3)">'
+        + (i < 3 ? rankMedals[i] : '<span style="color:var(--border)">' + (i+1) + '</span>')
+        + '</td>';
+      return '<tr style="border-bottom:1px solid var(--border);background:' + (i % 2 ? 'var(--surface)' : 'transparent') + ';' + rankBorder + '">'
+        + rankCell
         + '<td style="padding:8px 12px;white-space:nowrap"><span style="font-size:12px;font-weight:500">' + (d.name || d.id) + '</span></td>'
         + '<td style="padding:8px 12px;white-space:nowrap;font-size:12px">' + svcLabel + '</td>'
         + '<td style="padding:8px 12px;white-space:nowrap;font-size:12px;color:var(--muted)">' + row.shift + '</td>'
@@ -8484,7 +8490,7 @@ function buildPerformance() {
     driverContent = (activeFleet.length === 0
       ? '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No active drivers</div>'
       : '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
-        + '<thead><tr>' + _sTh('Driver','name') + _sTh('Service','svc') + _sTh('Shift','shift') + _sTh('Trips','trips') + _sTh('Pace/hr','pace') + _sTh('Projected','proj') + _sTh('Status','status') + '</tr></thead>'
+        + '<thead><tr><th style="padding:8px 12px;font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);width:40px">#</th>' + _sTh('Driver','name') + _sTh('Service','svc') + _sTh('Shift','shift') + _sTh('Trips','trips') + _sTh('Pace/hr','pace') + _sTh('Projected','proj') + _sTh('Status','status') + '</tr></thead>'
         + '<tbody>' + tableRows.join('') + '</tbody>'
         + '</table></div>')
       + (hasMore ? '<div style="padding:8px 14px;text-align:center;border-top:1px solid var(--border)">'
