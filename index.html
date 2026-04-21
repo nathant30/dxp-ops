@@ -2020,6 +2020,8 @@ function buildCmd() {
   var driverTotal = D4W ? D4W.length : 0;
   var podTotal    = Object.keys(window.PODS || {}).length;
 
+  if (cmdMapObj) { try { cmdMapObj.remove(); } catch(e) {} cmdMapObj = null; }
+  cmdMapReady = false;
   el.innerHTML = '<div class="main-card">'
     + '<div class="card-tabs">'
     + '<button class="ctab' + (CMD_TAB==='fleet'     ? ' on' : '') + '" onclick="cmdSwitchTab(\'fleet\',this)">'
@@ -2399,7 +2401,7 @@ function cmdSetMapView(view) {
   var gBtn = document.getElementById('vt-gap');
   if (dBtn) dBtn.className = 'vtbtn' + (view==='demand'?' on':'');
   if (gBtn) gBtn.className = 'vtbtn' + (view==='gap'   ?' on':'');
-  if (!cmdMapObj) return;
+  if (!cmdMapObj || !cmdMapObj.isStyleLoaded()) return;
   var showGap = (view === 'gap');
   ['demand-heat'].forEach(function(id){ try { cmdMapObj.setLayoutProperty(id,'visibility',showGap?'none':'visible'); } catch(e){} });
   ['gap-circles','gap-fill'].forEach(function(id){ try { cmdMapObj.setLayoutProperty(id,'visibility',showGap?'visible':'none'); } catch(e){} });
@@ -2408,6 +2410,7 @@ function cmdSetMapView(view) {
 // ─── PODS TAB ─────────────────────────────────────────────────────────────────
 function sparklineSVG(data, color) {
   var w = 120, h = 28;
+  if (!data || data.length < 2) return '<svg width="' + w + '" height="' + h + '"></svg>';
   var min = Math.min.apply(null, data);
   var max = Math.max.apply(null, data);
   var range = max - min || 1;
@@ -2446,7 +2449,7 @@ function cmdPodsPanel() {
       : '\u2014');
     var daysLeft = typeof capDaysLeft === 'function' ? capDaysLeft(pod) : null;
 
-    var healthCol = health >= 80 ? '#34d399' : health >= 60 ? '#fbbf24' : '#f87171';
+    var podHealthCol = health >= 80 ? '#34d399' : health >= 60 ? '#fbbf24' : '#f87171';
     var avatarCol = health >= 80 ? '#16a34a' : health >= 60 ? '#d97706' : '#dc2626';
     var letter = (pod.name || pid).charAt(0).toUpperCase();
 
@@ -2466,10 +2469,10 @@ function cmdPodsPanel() {
     var dash  = circ * health / 100;
     var healthRing = '<svg width="36" height="36" style="flex-shrink:0">'
       + '<circle cx="' + cx2 + '" cy="' + cy2 + '" r="' + r + '" fill="none" stroke="#e2e8f0" stroke-width="' + stroke + '"/>'
-      + '<circle cx="' + cx2 + '" cy="' + cy2 + '" r="' + r + '" fill="none" stroke="' + healthCol + '" stroke-width="' + stroke + '"'
+      + '<circle cx="' + cx2 + '" cy="' + cy2 + '" r="' + r + '" fill="none" stroke="' + podHealthCol + '" stroke-width="' + stroke + '"'
       + ' stroke-dasharray="' + dash.toFixed(1) + ' ' + circ.toFixed(1) + '"'
       + ' stroke-linecap="round" transform="rotate(-90 ' + cx2 + ' ' + cy2 + ')"/>'
-      + '<text x="' + cx2 + '" y="' + (cy2+4) + '" text-anchor="middle" font-size="9" font-weight="800" font-family="Manrope,sans-serif" fill="' + healthCol + '">' + health + '</text>'
+      + '<text x="' + cx2 + '" y="' + (cy2+4) + '" text-anchor="middle" font-size="9" font-weight="800" font-family="Manrope,sans-serif" fill="' + podHealthCol + '">' + health + '</text>'
       + '</svg>';
 
     var memberRows = members.slice(0, 5).map(function(d) {
@@ -2501,7 +2504,7 @@ function cmdPodsPanel() {
       + '<div class="pod-stat"><div class="pod-stat-val">\u20b1' + (active.length>0?Math.round(totRev/active.length).toLocaleString():'0') + '</div><div class="pod-stat-lbl">Avg RPD</div></div>'
       + '<div class="pod-stat"><div class="pod-stat-val">' + onTrack + '/' + active.length + '</div><div class="pod-stat-lbl">On Track</div></div>'
       + '</div>'
-      + '<div class="sparkline-wrap"><div class="spark-lbl">7-day RPD trend</div>' + sparklineSVG(spark, healthCol) + '</div>'
+      + '<div class="sparkline-wrap"><div class="spark-lbl">7-day RPD trend</div>' + sparklineSVG(spark, podHealthCol) + '</div>'
       + (memberRows ? '<div>' + memberRows + moreMembers + '</div>' : '')
       + '</div>'
       + '<div class="pod-footer">'
